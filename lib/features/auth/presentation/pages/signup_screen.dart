@@ -1,6 +1,12 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:meow_track/core/app_state.dart';
+import 'package:meow_track/router/app_router.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -10,13 +16,37 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
+  final _formKey = GlobalKey<FormState>();
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
   bool _agreeToTerms = false;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  // 🎯 PENGURUS DATA INPUT: Tambah controller untuk kesan teks secara masa nyata
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return;
+
+      print('Google Sign-Up Success: ${googleUser.email}');
+      appState.login(email: googleUser.email, password: 'google_auth_token');
+      if (mounted) {
+        context.go(AppRouter.dashboard);
+      }
+    } catch (error) {
+      print('Google Sign-Up Error: $error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to sign up with Google.')),
+      );
+    }
+  }
+
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
 
-  // 🎯 SENARAI PARAS GLOBAL: Semua negara dunia tanpa Israel
+  // 🎯 SENARAI UTAMA: Semua negara dunia tanpa Israel
   final List<Map<String, String>> _countries = [
     {"name": "Malaysia", "code": "+60", "iso": "my"},
     {"name": "Indonesia", "code": "+62", "iso": "id"},
@@ -113,7 +143,7 @@ class _SignupScreenState extends State<SignupScreen> {
     {"name": "Liechtenstein", "code": "+423", "iso": "li"},
     {"name": "Lithuania", "code": "+370", "iso": "lt"},
     {"name": "Luxembourg", "code": "+352", "iso": "lu"},
-    {"name": "Madagascar", "code": "+261", "iso": "mg"},
+    {"name": "Madagascar", "code": "+261", "mg": "mg"},
     {"name": "Malawi", "code": "+265", "iso": "mw"},
     {"name": "Maldives", "code": "+960", "iso": "mv"},
     {"name": "Mali", "code": "+223", "iso": "ml"},
@@ -192,38 +222,250 @@ class _SignupScreenState extends State<SignupScreen> {
   ];
 
   late Map<String, String> _selectedCountry;
+  late TapGestureRecognizer _termsRecognizer;
 
   @override
   void initState() {
     super.initState();
-    _selectedCountry = _countries[0]; // Set laluan asal kepada Malaysia
+    _selectedCountry = _countries[0];
+    _termsRecognizer = TapGestureRecognizer()..onTap = _showTermsSheet;
   }
 
   @override
   void dispose() {
+    _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _phoneController.dispose();
+    _termsRecognizer.dispose();
     super.dispose();
   }
 
-  // 🎯 SISTEM PENILAIAN PASSWORD: Kira tahap kekuatan password (0 hingga 3)
+  // 🎯 IMPLEMENTASI SEARCH NEGARA SECARA POP-UP MODAL BOTTOM SHEET
+  void _showCountrySearchPicker() {
+    List<Map<String, String>> filteredCountries = List.from(_countries);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Column(
+                children: [
+                  Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+                  const SizedBox(height: 20),
+                  const Text('Search Country', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 15),
+
+                  // Kotak Carian Negara
+                  Container(
+                    decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
+                    child: TextField(
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'Type country name or code...',
+                        prefixIcon: Icon(Icons.search, color: Color(0xFF985BEF)),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 15),
+                      ),
+                      onChanged: (query) {
+                        setModalState(() {
+                          filteredCountries = _countries.where((country) {
+                            final name = country['name']!.toLowerCase();
+                            final code = country['code']!.toLowerCase();
+                            final search = query.toLowerCase();
+                            return name.contains(search) || code.contains(search);
+                          }).toList();
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+
+                  // Senarai Paparan Hasil Carian
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: filteredCountries.length,
+                      itemBuilder: (context, index) {
+                        final country = filteredCountries[index];
+                        return ListTile(
+                          leading: Image.network(
+                            'https://flagcdn.com/w40/${country['iso']}.png',
+                            width: 30,
+                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.flag_outlined, size: 20),
+                          ),
+                          title: Text(country['name']!, style: const TextStyle(fontWeight: FontWeight.w500)),
+                          trailing: Text(country['code']!, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                          onTap: () {
+                            setState(() {
+                              _selectedCountry = country;
+                            });
+                            Navigator.pop(context);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showTermsSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Center(
+                child: Text('Agreement Documents', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Please read our official documents to understand how we protect your data and the rules of using Meowtrack.',
+                style: TextStyle(fontSize: 14, height: 1.6),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.description_outlined, color: Color(0xFF985BEF)),
+                title: const Text('Terms and Conditions', style: TextStyle(fontWeight: FontWeight.bold)),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push('/terms-conditions');
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.privacy_tip_outlined, color: Color(0xFF985BEF)),
+                title: const Text('Privacy Policy', style: TextStyle(fontWeight: FontWeight.bold)),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push('/privacy-policy');
+                },
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF985BEF),
+                    minimumSize: const Size(double.infinity, 56),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  ),
+                  child: const Text('I Understand', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _handleCreateAccount() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (!_agreeToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please agree to Terms of Service and Privacy Policy.')),
+      );
+      return;
+    }
+
+    final email = _emailController.text.trim();
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+    final phone = _phoneController.text.trim();
+    
+    // ... rest of the signup logic ...
+
+    try {
+      // 1. Create User with Firebase
+      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final user = userCredential.user;
+
+      if (user != null) {
+        // 🎯 2. ASSIGN ROLE IN FIRESTORE
+        // Check if admin email
+        final String role = (email == 'tegarhebat45@gmail.com') ? 'admin' : 'user';
+
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'email': email,
+          'username': username,
+          'role': role,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        // 3. Update Display Name (Username)
+        await user.updateDisplayName(username);
+
+        // 4. Send Email Verification
+        await user.sendEmailVerification();
+
+        appState.signUp(
+          email: email,
+          username: username,
+          password: password,
+          phoneNumber: '${_selectedCountry['code']} $phone',
+        );
+
+        // 5. Navigate to VERIFICATION SCREEN
+        if (mounted) {
+          context.push(AppRouter.verifyOtp);
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'An error occurred during signup.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to create account. Please try again.')),
+      );
+    }
+  }
+
   int _calculatePasswordStrength(String password) {
     if (password.isEmpty) return 0;
-    if (password.length < 6) return 1; // Tahap 1: Lemah
+    if (password.length < 6) return 1;
 
     bool hasUppercase = password.contains(RegExp(r'[A-Z]'));
     bool hasDigits = password.contains(RegExp(r'[0-9]'));
     bool hasSpecial = password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
 
     if (password.length >= 8 && hasUppercase && hasDigits && hasSpecial) {
-      return 3; // Tahap 3: Kuat
+      return 3;
     }
-    return 2; // Tahap 2: Sederhana
+    return 2;
   }
 
   @override
   Widget build(BuildContext context) {
-    // Jalankan semakan kekuatan setiap kali widget dibina semula
     final int strength = _calculatePasswordStrength(_passwordController.text);
 
     return Scaffold(
@@ -239,9 +481,11 @@ class _SignupScreenState extends State<SignupScreen> {
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 30.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
                 const SizedBox(height: 40),
                 const Text(
                   'Create an Account',
@@ -260,33 +504,27 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
+
+                // 🎯 KOD SVG DIKEMASKINI KE '-01.svg'
                 _buildLabel('Email'),
-                _buildTextField(hintText: 'Email', icon: 'assets/icons/Email.svg'),
+                _buildTextField(controller: _emailController, hintText: 'Email', icon: Icons.mail_outline),
                 const SizedBox(height: 15),
                 _buildLabel('Username'),
-                _buildTextField(hintText: 'Username', icon: 'assets/icons/Username.svg'),
+                _buildTextField(controller: _usernameController, hintText: 'Username', icon: Icons.person_outline),
                 const SizedBox(height: 15),
                 _buildLabel('Password'),
 
-                // 🎯 REKAAN INPUT PASSWORD: Hubung dengan controller & kesan perubahan taip
-                Container(
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5))]),
-                  child: TextField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    onChanged: (value) => setState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'Password',
-                      hintStyle: TextStyle(color: Colors.grey[400]),
-          suffixIcon: SvgPicture.asset('assets/icons/Password.svg', color: const Color(0xFF985BEF), width: 22, height: 22),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    ),
-                  ),
+                _buildTextField(
+                  controller: _passwordController,
+                  hintText: 'Password',
+                  icon: Icons.lock_outline,
+                  isPassword: _obscurePassword,
+                  onChanged: (value) => setState(() {}),
+                  onToggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
+                  validator: (v) => (v == null || v.isEmpty) ? 'Please enter password' : (v.length < 6 ? 'Min 6 characters' : null),
                 ),
                 const SizedBox(height: 10),
 
-                // 🎯 BAR KEKUATAN DINAMIK: Memanjang & bertukar warna mengikut tahap kekuatan teks
                 Row(
                   children: [
                     Expanded(
@@ -332,61 +570,61 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 const SizedBox(height: 15),
                 _buildLabel('Confirm Password'),
-                _buildTextField(hintText: 'Confirm Password', icon: 'assets/icons/Confirm Password.svg', isPassword: true, isCheck: true),
+                _buildTextField(
+                  controller: _confirmPasswordController, 
+                  hintText: 'Confirm Password', 
+                  icon: Icons.lock_outline,
+                  isPassword: _obscureConfirmPassword,
+                  onToggleVisibility: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Please confirm password';
+                    if (v != _passwordController.text) return 'Passwords do not match';
+                    return null;
+                  },
+                ),
                 const SizedBox(height: 15),
                 _buildLabel('Phone Number'),
 
-                // 🎯 FORM TELEFON ANTI-OVERFLOW & SISTEM BLOCK NEGARA
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      height: 55,
-                      decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5))]
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<Map<String, String>>(
-                          value: _selectedCountry,
-                          items: _countries.map((country) {
-                            return DropdownMenuItem<Map<String, String>>(
-                              value: country,
-                              child: Row(
-                                children: [
-                                  Image.network(
-                                    'https://flagcdn.com/w40/${country['iso']}.png',
-                                    width: 24,
-                                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.flag_outlined, size: 20),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(country['code']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedCountry = value!;
-                            });
-                          },
+                    // Tukar Dropdown lama ke GestureDetector baru yang ada fungsi SEARCH
+                    GestureDetector(
+                      onTap: _showCountrySearchPicker,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        height: 55,
+                        decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))]
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Image.network(
+                              'https://flagcdn.com/w40/${_selectedCountry['iso']}.png',
+                              width: 24,
+                              errorBuilder: (context, error, stackTrace) => const Icon(Icons.flag_outlined, size: 20),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(_selectedCountry['code']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            const Icon(Icons.arrow_drop_down, color: Colors.grey, size: 20),
+                          ],
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
-                    // Letak input dalam Expanded untuk sekat ralat overflow keluar screen
                     Expanded(
                       child: Container(
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5))]),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))]),
                         child: TextField(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
                           decoration: InputDecoration(
                             hintText: 'Enter phone number',
                             hintStyle: TextStyle(color: Colors.grey[400]),
-                            suffixIcon: SvgPicture.asset('assets/icons/Phone Number.svg', color: const Color(0xFF985BEF), width: 22, height: 22),
+                            suffixIcon: null, // Kekal ghaib mengikut arahan terdahulu
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                           ),
@@ -397,28 +635,39 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 const SizedBox(height: 10),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Checkbox(
-                      value: _agreeToTerms,
-                      onChanged: (value) => setState(() => _agreeToTerms = value!),
-                      activeColor: const Color(0xFF985BEF),
+                    SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: Checkbox(
+                        value: _agreeToTerms,
+                        onChanged: (value) => setState(() => _agreeToTerms = value!),
+                        activeColor: const Color(0xFF985BEF),
+                      ),
                     ),
-                    const Expanded(
+                    const SizedBox(width: 12),
+                    Expanded(
                       child: Text.rich(
                         TextSpan(
                           text: 'I agree to the ',
+                          style: const TextStyle(fontSize: 12, color: Colors.black87),
                           children: [
-                            TextSpan(text: 'Terms of Service and Privacy Policy', style: TextStyle(fontWeight: FontWeight.bold)),
+                            TextSpan(
+                              text: 'Terms of Service and Privacy Policy',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF985BEF)),
+                              recognizer: _termsRecognizer,
+                            ),
                           ],
                         ),
-                        style: TextStyle(fontSize: 12),
+                        textAlign: TextAlign.left,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: () => context.push('/verify-number'),
+                  onPressed: _handleCreateAccount,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF985BEF),
                     minimumSize: const Size(double.infinity, 56),
@@ -437,11 +686,25 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 const SizedBox(height: 20),
                 GestureDetector(
-                  onTap: () {},
+                  onTap: _handleGoogleSignIn,
                   child: Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(15)),
-                    child: Image.network('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png', height: 40, width: 40),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      'assets/images/Google__G__logo.svg.png',
+                      height: 40,
+                      width: 40,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 30),
@@ -450,7 +713,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   children: [
                     Text('Already have an account? ', style: TextStyle(color: Colors.grey[700])),
                     GestureDetector(
-                      onTap: () => context.go('/login'),
+                      onTap: () => context.go(AppRouter.login),
                       child: const Text('Log In', style: TextStyle(color: Color(0xFF985BEF), fontWeight: FontWeight.bold)),
                     ),
                   ],
@@ -461,8 +724,9 @@ class _SignupScreenState extends State<SignupScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildLabel(String label) {
     return Align(
@@ -471,24 +735,62 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  Widget _buildTextField({required String hintText, required Object icon, bool isPassword = false, bool isCheck = false}) {
+  Widget _buildTextField({
+    TextEditingController? controller,
+    required String hintText,
+    required Object icon,
+    bool isPassword = false,
+    VoidCallback? onToggleVisibility,
+    String? Function(String?)? validator,
+    void Function(String)? onChanged,
+  }) {
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5))]),
-      child: TextField(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 5)),
+        ],
+      ),
+      child: TextFormField(
+        controller: controller,
         obscureText: isPassword,
+        validator:
+            validator ?? (v) => (v == null || v.isEmpty) ? 'Cannot be empty' : null,
+        onChanged: onChanged,
         decoration: InputDecoration(
           hintText: hintText,
           hintStyle: TextStyle(color: Colors.grey[400]),
-          suffixIcon: Padding(
-            padding: const EdgeInsets.all(14.0), // Increased padding to make icon smaller
-            child: (isCheck)
-                ? const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF985BEF), size: 18)
-                : ((icon is String)
-                    ? SvgPicture.asset(icon, colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn), width: 18, height: 18)
-                    : Icon(icon as IconData, color: const Color(0xFF985BEF), size: 18)),
+          prefixIcon: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: (icon is String)
+                ? SvgPicture.asset(
+                    icon,
+                    colorFilter:
+                        const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn),
+                    width: 20,
+                    height: 20,
+                  )
+                : Icon(icon as IconData, color: const Color(0xFF985BEF), size: 20),
           ),
+          suffixIcon: onToggleVisibility != null
+              ? IconButton(
+                  icon: Icon(
+                    isPassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: const Color(0xFF985BEF),
+                    size: 20,
+                  ),
+                  onPressed: onToggleVisibility,
+                )
+              : null,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
         ),
       ),
     );

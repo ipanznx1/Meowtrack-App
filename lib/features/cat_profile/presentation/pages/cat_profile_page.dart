@@ -1,7 +1,10 @@
+import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:meow_track/core/app_state.dart';
+import 'package:meow_track/core/widgets/image_background.dart';
 
 class CatProfilePage extends StatelessWidget {
   final Cat cat;
@@ -9,16 +12,17 @@ class CatProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentCat = cat;
+
     return Scaffold(
       body: Stack(
         children: [
-          // 1. GRADIENT BACKGROUND (Soft theme color to white)
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [cat.themeColor, Colors.white],
+                colors: [currentCat.themeColor, Colors.white],
                 stops: const [0.0, 0.4],
               ),
             ),
@@ -28,7 +32,6 @@ class CatProfilePage extends StatelessWidget {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  // CUSTOM APP BAR
                   Padding(
                     padding: const EdgeInsets.all(10),
                     child: Row(
@@ -36,9 +39,9 @@ class CatProfilePage extends StatelessWidget {
                       children: [
                         IconButton(
                           icon: SvgPicture.asset('assets/icons/Back.svg', width: 40, height: 40, colorFilter: const ColorFilter.mode(Colors.black, BlendMode.srcIn)),
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: () => context.pop(),
                         ),
-                        Text(cat.name, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 36)),
+                        Text(currentCat.name, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 36)),
                         const SizedBox(width: 50),
                       ],
                     ),
@@ -46,7 +49,6 @@ class CatProfilePage extends StatelessWidget {
                   
                   const SizedBox(height: 15),
                   
-                  // 2. MAIN CAT CARD
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 25),
                     child: Container(
@@ -59,10 +61,10 @@ class CatProfilePage extends StatelessWidget {
                       ),
                       child: Center(
                         child: Transform.scale(
-                          scale: cat.imageScale,
+                          scale: currentCat.imageScale,
                           child: Padding(
                             padding: const EdgeInsets.all(20),
-                            child: Image.asset(cat.image, fit: BoxFit.contain),
+                            child: _buildCatImage(currentCat.image),
                           ),
                         ),
                       ),
@@ -71,33 +73,37 @@ class CatProfilePage extends StatelessWidget {
                   
                   const SizedBox(height: 30),
                   
-                  // 3. BREED & GENDER
-                  _textInfo('Breed', cat.breed),
+                  _textInfo('Breed', currentCat.breed.toUpperCase()),
                   const SizedBox(height: 20),
-                  _textInfo('Gender', cat.gender),
+                  _textInfo('Gender', currentCat.gender),
                   
                   const SizedBox(height: 35),
                   
-                  // 4. MENU GRID (Clean & Centered - Gaya Image 1)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 25),
                     child: Column(
                       children: [
-                        _buildStyledMenu(context, 'Health', 'assets/images/Health button.png', () => context.push('/health-overview', extra: cat), 130),
-                        const SizedBox(height: 20),
                         Row(
                           children: [
-                            Expanded(child: _buildStyledMenu(context, 'Gallery', 'assets/images/Gallery button.png', () => context.push('/gallery', extra: cat), 180)),
-                            const SizedBox(width: 20),
-                            Expanded(child: _buildStyledMenu(context, 'Notes', 'assets/images/Notes button.png', () => context.push('/notes', extra: cat), 180)),
+                            Expanded(child: _buildStyledMenu(context, 'Health', 'assets/images/Health button.png', () => context.push('/health-overview/${currentCat.id}', extra: currentCat), 160, currentCat)),
+                            const SizedBox(width: 15),
+                            Expanded(child: _buildStyledMenu(context, 'Gallery', 'assets/images/Gallery button.png', () => context.push('/gallery/${currentCat.id}', extra: currentCat), 160, currentCat)),
                           ],
                         ),
-                        const SizedBox(height: 20),
-                        _buildStyledMenu(context, 'Documentation', 'assets/images/Documentation button.png', () => context.push('/documentation', extra: cat), 130),
+                        const SizedBox(height: 15),
+                        Row(
+                          children: [
+                            Expanded(child: _buildStyledMenu(context, 'Notes', 'assets/images/Notes button.png', () => context.push('/notes/${currentCat.id}', extra: currentCat), 160, currentCat)),
+                            const SizedBox(width: 15),
+                            Expanded(child: _buildStyledMenu(context, 'Documents', 'assets/images/Documentation button.png', () => context.push('/documentation/${currentCat.id}', extra: currentCat), 160, currentCat)),
+                          ],
+                        ),
+                        const SizedBox(height: 15),
+                        _buildStyledMenu(context, 'Passport', 'assets/icons/Cat’s Profile.svg', () => context.push('/medical-history/${currentCat.id}', extra: currentCat), 110, currentCat, isSvg: true),
+                        const SizedBox(height: 40),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 50),
                 ],
               ),
             ),
@@ -107,44 +113,69 @@ class CatProfilePage extends StatelessWidget {
     );
   }
 
+  Widget _buildCatImage(String imagePath) {
+    if (imagePath.startsWith('http')) {
+      return CachedNetworkImage(
+        imageUrl: imagePath,
+        fit: BoxFit.contain,
+        placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        errorWidget: (context, url, error) => const Icon(Icons.error, size: 50),
+      );
+    } else if (imagePath.startsWith('/') || imagePath.startsWith('C:') || imagePath.startsWith('E:') || imagePath.startsWith('content:') || imagePath.contains('cat_cutout') || imagePath.contains('cache')) {
+      return Image.file(File(imagePath), fit: BoxFit.contain, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 50, color: Colors.grey));
+    }
+    return Image.asset(imagePath, fit: BoxFit.contain, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 50, color: Colors.grey));
+  }
+
   Widget _textInfo(String l, String v) => Column(children: [
     Text(l, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
     Text(v, style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
   ]);
 
-  // 🎯 WIDGET BARU: Butang Menu dengan Gradient & Gambar di dalam
-  Widget _buildStyledMenu(BuildContext context, String title, String asset, VoidCallback onTap, double height) {
+  Widget _buildStyledMenu(BuildContext context, String title, String asset, VoidCallback onTap, double height, Cat c, {bool isSvg = false}) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        height: height,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(35),
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.white, cat.themeColor.withValues(alpha: 0.15)],
-          ),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5)),
-          ],
-        ),
-        child: Column(
-          children: [
-            // Gambar diletakkan di tengah dengan padding supaya tidak penuh satu butang
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                child: Image.asset(asset, fit: BoxFit.contain),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(35),
+        child: Container(
+          height: height,
+          width: double.infinity,
+          color: Colors.white,
+          child: Stack(
+            children: [
+              if (isSvg)
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.all(40.0),
+                    child: SvgPicture.asset(asset, colorFilter: ColorFilter.mode(c.themeColor.withValues(alpha: 0.3), BlendMode.srcIn)),
+                  ),
+                )
+              else
+                Positioned.fill(child: ImageBackground(assetPath: asset, color: c.themeColor, imageOpacity: 0.78)),
+
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 80,
+                child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, c.themeColor.withValues(alpha: 0.28)],
+                      ),
+                    ),
+                ),
               ),
-            ),
-            // Teks di bawah gambar
-            Padding(
-              padding: const EdgeInsets.only(bottom: 15),
-              child: Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.black)),
-            ),
-          ],
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 12,
+                child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.black54), textAlign: TextAlign.center),
+              ),
+            ],
+          ),
         ),
       ),
     );

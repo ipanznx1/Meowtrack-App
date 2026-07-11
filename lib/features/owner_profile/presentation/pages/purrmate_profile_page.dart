@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
-import 'purrmates_page.dart';
+import 'package:meow_track/core/app_state.dart';
 
 class PurrmateProfilePage extends StatelessWidget {
   final Purrmate purrmate;

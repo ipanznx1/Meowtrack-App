@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:meow_track/core/app_state.dart';
+import 'package:meow_track/router/app_router.dart';
 
 class IntroScreen extends StatefulWidget {
   const IntroScreen({super.key});
@@ -17,11 +20,18 @@ class _IntroScreenState extends State<IntroScreen> {
   }
 
   Future<void> _navigateToNext() async {
-    // Tunggu 4 saat untuk tunjuk animasi logo
     await Future.delayed(const Duration(seconds: 4));
-    if (mounted) {
-      context.go('/onboarding');
+    if (!mounted) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      appState.login(email: user.email ?? '', password: '');
+      final route = await appState.resolvePostLoginRoute();
+      if (mounted) context.go(route);
+      return;
     }
+
+    context.go('/onboarding');
   }
 
   @override
@@ -43,11 +53,12 @@ class _IntroScreenState extends State<IntroScreen> {
             ),
           ),
           
-          // 2. LOTTIE ANIMATION
+          // 2. LOTTIE ANIMATION & SUPPORTED BY
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                const Spacer(flex: 3),
                 Transform.scale(
                   scale: 1.2,
                   child: Lottie.asset(
@@ -62,6 +73,36 @@ class _IntroScreenState extends State<IntroScreen> {
                     ),
                   ),
                 ),
+                const Spacer(flex: 2),
+                // SUPPORTED BY SECTION
+                Column(
+                  children: [
+                    Text(
+                      "Supported by :",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Image.asset(
+                      'assets/images/department_of_veterinary_1x.png',
+                      height: 60,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 5),
+                    const Text(
+                      "Department of Veterinary Services",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 40),
               ],
             ),
           ),

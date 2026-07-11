@@ -14,33 +14,33 @@ class MainScaffold extends StatelessWidget {
     return Scaffold(
       body: child,
       bottomNavigationBar: BottomAppBar(
-        height: 85,
-        notchMargin: 12,
+        height: 80,
+        notchMargin: 10,
         color: Colors.white,
         elevation: 10,
         shape: const CircularNotchedRectangle(),
+        padding: EdgeInsets.zero,
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _buildNavItem(context, 'assets/icons/Dashboard Nav Bar.svg', "Dashboard", location == '/dashboard', '/dashboard'),
-            _buildNavItem(context, 'assets/icons/GPS Track Nav Bar.svg', "Track", location == '/gps-tracking', '/gps-tracking'),
-            const SizedBox(width: 40), // FAB space
-            _buildNavItem(context, 'assets/icons/Vet Nav Bar.svg', "Vet", location == '/vet-directory', '/vet-directory'),
-            _buildNavItem(context, 'assets/icons/Profile Nav Bar.svg', "Profile", location == '/owner-profile', '/owner-profile'),
+            Expanded(child: _buildNavItem(context, 'assets/icons/Dashboard Nav Bar.svg', "Dashboard", location == '/dashboard', '/dashboard')),
+            Expanded(child: _buildNavItem(context, 'assets/icons/GPS Track Nav Bar.svg', "Track", location == '/gps-tracking', '/gps-tracking')),
+            const SizedBox(width: 70), // Center gap for FAB
+            Expanded(child: _buildNavItem(context, 'assets/icons/Vet Nav Bar.svg', "Vet", location == '/vet-directory', '/vet-directory')),
+            Expanded(child: _buildNavItem(context, 'assets/icons/Profile Nav Bar.svg', "Profile", location == '/owner-profile', '/owner-profile')),
           ],
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: Container(
+      floatingActionButton: SizedBox(
         height: 70,
         width: 70,
-        margin: const EdgeInsets.only(top: 30),
         child: FloatingActionButton(
           onPressed: () => context.push('/ar-scan'),
           backgroundColor: const Color(0xFF985BEF),
-          elevation: 8,
+          elevation: 5,
           shape: const CircleBorder(),
-          child: SvgPicture.asset('assets/icons/Camera.svg', color: Colors.white, width: 35, height: 35),
+          child: SvgPicture.asset('assets/icons/Camera.svg', color: Colors.white, width: 32, height: 32),
         ),
       ),
     );

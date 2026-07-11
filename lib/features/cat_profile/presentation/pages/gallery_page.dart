@@ -1,9 +1,12 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:meow_track/core/app_state.dart';
+import 'package:meow_track/core/permission_service.dart';
 
 class GalleryPage extends StatefulWidget {
   final Cat cat;
@@ -15,60 +18,75 @@ class GalleryPage extends StatefulWidget {
 
 class _GalleryPageState extends State<GalleryPage> {
   final ImagePicker _picker = ImagePicker();
-  
-  // Simulated gallery data grouped by date
-  Map<String, List<String>> galleryData = {
-    'Today': [
-      'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=500',
-    ],
-    'Yesterday': [
-      'https://images.unsplash.com/photo-1573865526739-10659fec78a5?q=80&w=500',
-    ],
-    '3 January': [
-      'https://images.unsplash.com/photo-1495360010541-f48722b34f7d?q=80&w=500',
-    ],
-  };
+  bool _isUploading = false;
 
   Future<void> _addImage(ImageSource source) async {
-    // 1. Handle Permissions
-    PermissionStatus status;
+    bool hasPermission = false;
+
     if (source == ImageSource.camera) {
-      status = await Permission.camera.request();
+      hasPermission = await PermissionService.requestCameraPermission(context);
     } else {
-      // For modern Android/iOS, storage permission handling varies, 
-      // but image_picker handles most basic cases. We'll check general status.
-      status = await Permission.photos.request();
+      hasPermission = await PermissionService.requestGalleryPermission(context);
     }
 
-    if (status.isGranted || status.isLimited) {
-      final XFile? image = await _picker.pickImage(source: source);
+    if (hasPermission) {
+      final XFile? image = await _picker.pickImage(source: source, imageQuality: 70);
       if (image != null) {
-        setState(() {
-          // In a real app, we'd save the local path. 
-          // For this demo, we add the path to our 'Today' list.
-          galleryData['Today']?.insert(0, image.path);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Photo added to "Today"')),
-        );
+        setState(() => _isUploading = true);
+
+        try {
+          final File file = File(image.path);
+          final String fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+          
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('galleries')
+              .child(widget.cat.id)
+              .child(fileName);
+          
+          await storageRef.putFile(file);
+          final String downloadUrl = await storageRef.getDownloadURL();
+
+          await FirebaseFirestore.instance.collection('galleries').add({
+            'catId': widget.cat.id,
+            'url': downloadUrl,
+            'date': _getFormattedDate(),
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Photo added successfully!')),
+            );
+          }
+        } catch (e) {
+          debugPrint("Gallery Upload Error: $e");
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Upload failed: ${e.toString().split(']').last}')),
+            );
+          }
+        } finally {
+          if (mounted) setState(() => _isUploading = false);
+        }
       }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Camera/Gallery permission is required to add photos.')),
-      );
     }
+  }
+
+  String _getFormattedDate() {
+    final now = DateTime.now();
+    return '${now.day} ${_getMonthName(now.month)}';
+  }
+
+  String _getMonthName(int month) {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return months[month - 1];
   }
 
   @override
   Widget build(BuildContext context) {
-    // Dynamic theme color mapping based on cat profile
-    Color backgroundColor = widget.cat.themeColor;
-    if (widget.cat.name == "Luna") {
-      backgroundColor = const Color(0xFFC4D4EC); // Soft Pastel Blue/Grey
-    }
-
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: widget.cat.themeColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -81,47 +99,44 @@ class _GalleryPageState extends State<GalleryPage> {
       ),
       body: Column(
         children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
-                    child: const TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search...',
-                        border: InputBorder.none,
-                        suffixIcon: Icon(Icons.search, color: Color(0xFF985BEF)),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
-                  child: const Icon(Icons.tune, color: Color(0xFF985BEF)),
-                ),
-              ],
-            ),
-          ),
+          if (_isUploading) const LinearProgressIndicator(color: Color(0xFF985BEF)),
           
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              itemCount: galleryData.keys.length,
-              itemBuilder: (context, index) {
-                String date = galleryData.keys.elementAt(index);
-                List<String> images = galleryData[date]!;
-                return _buildGallerySection(date, images);
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('galleries')
+                  .where('catId', isEqualTo: widget.cat.id)
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: Colors.white));
+                }
+                
+                final docs = snapshot.data?.docs ?? [];
+                if (docs.isEmpty) {
+                  return const Center(child: Text('No photos yet. Tap add to start!', style: TextStyle(color: Colors.grey)));
+                }
+
+                return GridView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: docs.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 1,
+                  ),
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data() as Map<String, dynamic>;
+                    final String url = data['url'] ?? '';
+                    return _buildGridImage(url);
+                  },
+                );
               },
             ),
           ),
 
-          // Bottom Action Bar
           _buildBottomActions(),
           const SizedBox(height: 30),
         ],
@@ -129,41 +144,55 @@ class _GalleryPageState extends State<GalleryPage> {
     );
   }
 
-  Widget _buildGallerySection(String date, List<String> images) {
-    return Column(
-      children: [
-        Text(date, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        const SizedBox(height: 15),
-        SizedBox(
-          height: 250,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 40),
-            itemCount: images.length,
-            itemBuilder: (context, index) {
-              return _buildStackedImage(images[index]);
-            },
+  Widget _buildGridImage(String imagePath) {
+    return GestureDetector(
+      onTap: () => _showFullScreenImage(imagePath),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 5)],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(15),
+          child: CachedNetworkImage(
+            imageUrl: imagePath, 
+            fit: BoxFit.cover,
+            placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+            errorWidget: (context, url, error) => const Icon(Icons.broken_image, size: 30, color: Colors.grey),
           ),
         ),
-        const SizedBox(height: 30),
-      ],
+      ),
     );
   }
 
-  Widget _buildStackedImage(String imagePath) {
-    bool isUrl = imagePath.startsWith('http');
-    return Container(
-      width: 180,
-      margin: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: isUrl 
-          ? Image.network(imagePath, fit: BoxFit.cover)
-          : Image.file(File(imagePath), fit: BoxFit.cover),
+  void _showFullScreenImage(String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: CachedNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.contain,
+                placeholder: (context, url) => const CircularProgressIndicator(),
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -183,7 +212,7 @@ class _GalleryPageState extends State<GalleryPage> {
             icon: const Icon(Icons.camera_alt_outlined, size: 40),
             onPressed: () => _addImage(ImageSource.camera),
           ),
-          Container(height: 40, width: 1, color: Colors.black26), // Vertical Divider
+          Container(height: 40, width: 1, color: Colors.black26),
           IconButton(
             icon: const Icon(Icons.add, size: 40),
             onPressed: () => _addImage(ImageSource.gallery),

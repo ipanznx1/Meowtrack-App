@@ -1,21 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:meow_track/core/app_state.dart';
+import 'package:meow_track/core/pages/not_implemented_page.dart';
 
-class PreferencesPage extends StatefulWidget {
+class PreferencesPage extends StatelessWidget {
   const PreferencesPage({super.key});
 
   @override
-  State<PreferencesPage> createState() => _PreferencesPageState();
-}
-
-class _PreferencesPageState extends State<PreferencesPage> {
-  // Unit State
-  bool isKg = true;
-  bool isMeters = true;
-
-  @override
   Widget build(BuildContext context) {
+    final state = context.watch<AppStateController>();
+
     return Scaffold(
       backgroundColor: const Color(0xFFEFEFEF),
       appBar: AppBar(
@@ -41,9 +37,23 @@ class _PreferencesPageState extends State<PreferencesPage> {
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(25)),
               child: Column(
                 children: [
-                  _buildUnitRow("Weight Unit", 'assets/icons/Weight Unit.svg', "Kilograms (kg)", "Pounds (lbs)", isKg, (val) => setState(() => isKg = val)),
+                  _buildUnitRow(
+                    "Weight Unit", 
+                    'assets/icons/Weight Unit.svg', 
+                    "Kilograms (kg)", 
+                    "Pounds (lbs)", 
+                    state.isKg, 
+                    (val) => state.setWeightUnit(val)
+                  ),
                   const SizedBox(height: 25),
-                  _buildUnitRow("Distance Unit", 'assets/icons/Distance Unit.svg', "Meters / Kilometers", "Feet / Miles", isMeters, (val) => setState(() => isMeters = val)),
+                  _buildUnitRow(
+                    "Distance Unit", 
+                    'assets/icons/Distance Unit.svg', 
+                    "Meters / Kilometers", 
+                    "Feet / Miles", 
+                    state.isMeters, 
+                    (val) => state.setDistanceUnit(val)
+                  ),
                 ],
               ),
             ),
@@ -60,6 +70,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
                   const Divider(height: 1, indent: 60),
                   _buildNavRow("Tracking Frequency", 'assets/icons/Tracking Frequency.svg', () => context.push('/preferences/tracking-freq')),
                   const Divider(height: 1, indent: 60),
+                  _buildNavRow("Notifications", 'assets/icons/Notification.svg', () => context.push('/preferences/notifications')),
+                  const Divider(height: 1, indent: 60),
                   _buildNavRow("My privacy", 'assets/icons/My privacy.svg', () => context.push('/preferences/privacy')),
                 ],
               ),
@@ -69,7 +81,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
             const Text("Account", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 10),
             ElevatedButton.icon(
-              onPressed: () {},
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotImplementedPage(title: 'Preferences - Action'))),
               icon: SvgPicture.asset('assets/icons/Delete.svg', colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn), width: 20, height: 20),
               label: const Text("Delete Account", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
@@ -137,20 +149,15 @@ class _PreferencesPageState extends State<PreferencesPage> {
 }
 
 // --------------------------------------------------------------------------
-// SUB-SCREEN 1: SAFE ZONE RADIUS (Image 2)
+// SUB-SCREEN 1: SAFE ZONE RADIUS
 // --------------------------------------------------------------------------
-class SafeZoneRadiusPage extends StatefulWidget {
+class SafeZoneRadiusPage extends StatelessWidget {
   const SafeZoneRadiusPage({super.key});
 
   @override
-  State<SafeZoneRadiusPage> createState() => _SafeZoneRadiusPageState();
-}
-
-class _SafeZoneRadiusPageState extends State<SafeZoneRadiusPage> {
-  double _radius = 350;
-
-  @override
   Widget build(BuildContext context) {
+    final state = context.watch<AppStateController>();
+
     return Scaffold(
       backgroundColor: const Color(0xFFEFEFEF),
       body: SafeArea(
@@ -177,12 +184,12 @@ class _SafeZoneRadiusPageState extends State<SafeZoneRadiusPage> {
                   const Text("0m", style: TextStyle(fontWeight: FontWeight.bold)),
                   Expanded(
                     child: Slider(
-                      value: _radius,
+                      value: state.safeZoneRadius,
                       min: 0,
                       max: 500,
                       activeColor: const Color(0xFF985BEF),
                       inactiveColor: Colors.grey[300],
-                      onChanged: (v) => setState(() => _radius = v),
+                      onChanged: (v) => state.setSafeZoneRadius(v),
                     ),
                   ),
                   const Text("500m", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -199,9 +206,9 @@ class _SafeZoneRadiusPageState extends State<SafeZoneRadiusPage> {
                   decoration: BoxDecoration(
                     color: Colors.white, 
                     borderRadius: BorderRadius.circular(15),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5)],
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
                   ),
-                  child: Center(child: Text(_radius.toInt().toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+                  child: Center(child: Text(state.safeZoneRadius.toInt().toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
                 ),
                 const SizedBox(width: 15),
                 const Text("m", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -215,20 +222,15 @@ class _SafeZoneRadiusPageState extends State<SafeZoneRadiusPage> {
 }
 
 // --------------------------------------------------------------------------
-// SUB-SCREEN 2: TRACKING FREQUENCY (Image 3)
+// SUB-SCREEN 2: TRACKING FREQUENCY
 // --------------------------------------------------------------------------
-class TrackingFrequencyPage extends StatefulWidget {
+class TrackingFrequencyPage extends StatelessWidget {
   const TrackingFrequencyPage({super.key});
 
   @override
-  State<TrackingFrequencyPage> createState() => _TrackingFrequencyPageState();
-}
-
-class _TrackingFrequencyPageState extends State<TrackingFrequencyPage> {
-  String _selectedFreq = "High Accuracy";
-
-  @override
   Widget build(BuildContext context) {
+    final state = context.watch<AppStateController>();
+
     return Scaffold(
       backgroundColor: const Color(0xFFEFEFEF),
       body: SafeArea(
@@ -252,9 +254,9 @@ class _TrackingFrequencyPageState extends State<TrackingFrequencyPage> {
               padding: const EdgeInsets.symmetric(horizontal: 25.0),
               child: Column(
                 children: [
-                  _buildRadioCard("High Accuracy (Every 1 min)", "High Accuracy"),
-                  _buildRadioCard("Balanced (5 mins)", "Balanced"),
-                  _buildRadioCard("Power Saving (15 mins)", "Power Saving"),
+                  _buildRadioCard(context, "High Accuracy (Every 1 min)", "High Accuracy", state),
+                  _buildRadioCard(context, "Balanced (5 mins)", "Balanced", state),
+                  _buildRadioCard(context, "Power Saving (15 mins)", "Power Saving", state),
                 ],
               ),
             ),
@@ -264,17 +266,17 @@ class _TrackingFrequencyPageState extends State<TrackingFrequencyPage> {
     );
   }
 
-  Widget _buildRadioCard(String label, String value) {
-    bool isSelected = _selectedFreq == value;
+  Widget _buildRadioCard(BuildContext context, String label, String value, AppStateController state) {
+    bool isSelected = state.trackingFrequency == value;
     return GestureDetector(
-      onTap: () => setState(() => _selectedFreq = value),
+      onTap: () => state.setTrackingFrequency(value),
       child: Container(
         margin: const EdgeInsets.only(bottom: 20),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         decoration: BoxDecoration(
           color: Colors.white, 
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5)],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
         ),
         child: Row(
           children: [
@@ -296,138 +298,139 @@ class _TrackingFrequencyPageState extends State<TrackingFrequencyPage> {
 }
 
 // --------------------------------------------------------------------------
-// SUB-SCREEN 3: MY PRIVACY (Image 1)
+// SUB-SCREEN 4: NOTIFICATION SETTINGS
 // --------------------------------------------------------------------------
-class MyPrivacyPage extends StatefulWidget {
-  const MyPrivacyPage({super.key});
-
-  @override
-  State<MyPrivacyPage> createState() => _MyPrivacyPageState();
-}
-
-class _MyPrivacyPageState extends State<MyPrivacyPage> {
-  String _whoCanSee = "Public";
-  bool _showBreed = true;
-  bool _showPhotos = false;
-  bool _showMed = false;
+class NotificationSettingsPage extends StatelessWidget {
+  const NotificationSettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<AppStateController>();
+
     return Scaffold(
       backgroundColor: const Color(0xFFEFEFEF),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 20),
-                  child: IconButton(
-                    icon: SvgPicture.asset('assets/icons/Back.svg', colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn), width: 40, height: 40),
-                    onPressed: () => context.pop(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Center(child: Text("My privacy", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
-              const SizedBox(height: 40),
-              
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 30),
-                child: Text("Who can see my cat profile ?", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-              ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 25),
-                child: Column(
-                  children: [
-                    _buildRadioCard("Public (Anyone with my Care Code)", "Public"),
-                    _buildRadioCard("My Friends Only (Only approved friends)", "Friends"),
-                    _buildRadioCard("Private (Only me and my Co-Owners)", "Private"),
-                  ],
-                ),
-              ),
-              
-              const SizedBox(height: 30),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 30),
-                child: Text("Custom visibility", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-              ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 25),
-                child: Column(
-                  children: [
-                    _buildSwitchCard("Show My Cat's Breed", _showBreed, (v) => setState(() => _showBreed = v)),
-                    _buildSwitchCard("Show My Cat's Photos", _showPhotos, (v) => setState(() => _showPhotos = v)),
-                    _buildSwitchCard("Show Medical & Vaccine Status", _showMed, (v) => setState(() => _showMed = v)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 40),
-            ],
-          ),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: SvgPicture.asset('assets/icons/Back.svg', colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn), width: 30, height: 30),
+          onPressed: () => context.pop(),
         ),
+        title: const Text("Notification Settings", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        centerTitle: true,
       ),
-    );
-  }
-
-  Widget _buildRadioCard(String label, String value) {
-    bool isSelected = _whoCanSee == value;
-    return GestureDetector(
-      onTap: () => setState(() => _whoCanSee = value),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 15),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        decoration: BoxDecoration(
-          color: Colors.white, 
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5)],
-        ),
-        child: Row(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(25),
+        child: Column(
           children: [
-            Container(
-              width: 18, height: 18,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle, 
-                border: Border.all(color: Colors.grey.shade400, width: 1.5),
-                color: isSelected ? const Color(0xFF985BEF) : Colors.white,
+            _buildToggleCard(
+              title: "Master Notifications",
+              subtitle: "Enable or disable all app notifications",
+              value: state.notificationsEnabled,
+              onChanged: (v) => state.setNotificationsEnabled(v),
+              isMaster: true,
+            ),
+            const SizedBox(height: 20),
+            Opacity(
+              opacity: state.notificationsEnabled ? 1.0 : 0.5,
+              child: AbsorbPointer(
+                absorbing: !state.notificationsEnabled,
+                child: Column(
+                  children: [
+                    _buildToggleCard(
+                      title: "Appointment Reminders",
+                      subtitle: "Notifications for vet visits and tasks",
+                      value: state.notifyAppointments,
+                      onChanged: (v) => state.setNotifyAppointments(v),
+                    ),
+                    const SizedBox(height: 15),
+                    _buildToggleCard(
+                      title: "Chat Messages",
+                      subtitle: "Get alerts when you receive a message",
+                      value: state.notifyChat,
+                      onChanged: (v) => state.setNotifyChat(v),
+                    ),
+                    const SizedBox(height: 15),
+                    _buildToggleCard(
+                      title: "Emergency Alerts",
+                      subtitle: "Lost cat reports nearby",
+                      value: state.notifyEmergency,
+                      onChanged: (v) => state.setNotifyEmergency(v),
+                    ),
+                    const SizedBox(height: 15),
+                    _buildToggleCard(
+                      title: "Daily Care Reminders",
+                      subtitle: "Reminders to feed and groom your cat",
+                      value: state.notifyDailyCare,
+                      onChanged: (v) => state.setNotifyDailyCare(v),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(width: 15),
-            Expanded(child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSwitchCard(String label, bool value, Function(bool) onChanged) {
+  Widget _buildToggleCard({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    bool isMaster = false,
+  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white, 
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5)],
+        color: isMaster ? const Color(0xFF985BEF).withOpacity(0.1) : Colors.white,
+        borderRadius: BorderRadius.circular(25),
+        border: isMaster ? Border.all(color: const Color(0xFF985BEF), width: 1) : null,
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isMaster ? const Color(0xFF985BEF) : Colors.black)),
+                const SizedBox(height: 5),
+                Text(subtitle, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              ],
+            ),
+          ),
           Switch(
-            value: value, 
+            value: value,
             onChanged: onChanged,
-            activeThumbColor: Colors.black87,
-            activeTrackColor: Colors.grey.shade300,
-            inactiveThumbColor: Colors.grey.shade300,
-            inactiveTrackColor: Colors.grey.shade100,
+            activeColor: const Color(0xFF985BEF),
           ),
         ],
       ),
+    );
+  }
+}
+// --------------------------------------------------------------------------
+// SUB-SCREEN 3: MY PRIVACY
+// --------------------------------------------------------------------------
+class MyPrivacyPage extends StatelessWidget {
+  const MyPrivacyPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFEFEFEF),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: SvgPicture.asset('assets/icons/Back.svg', colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn), width: 30, height: 30),
+          onPressed: () => context.pop(),
+        ),
+        title: const Text("My Privacy", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        centerTitle: true,
+      ),
+      body: const Center(child: Text("Privacy settings and data management.")),
     );
   }
 }

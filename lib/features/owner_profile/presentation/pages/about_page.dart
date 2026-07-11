@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:meow_track/core/pages/not_implemented_page.dart';
+import 'privacy_policy_page.dart';
+import 'terms_conditions_page.dart';
+
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
 
@@ -71,7 +75,23 @@ class AboutPage extends StatelessWidget {
                   const Text("Last update : 21 January 2026", style: TextStyle(color: Colors.grey, fontSize: 10)),
                   const SizedBox(height: 15),
                   ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Checking for updates..."),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                      Future.delayed(const Duration(seconds: 2), () {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Your app is up to date!"),
+                            ),
+                          );
+                        }
+                      });
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF985BEF),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -95,9 +115,31 @@ class AboutPage extends StatelessWidget {
             // 4. ACTION BUTTONS
             Row(
               children: [
-                Expanded(child: _buildActionBtn("Privacy Policy")),
-                const SizedBox(width: 15),
-                Expanded(child: _buildActionBtn("Contact Developer")),
+                Expanded(
+                  child: _buildActionBtn(
+                    context,
+                    "Privacy Policy",
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PrivacyPolicyPage(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildActionBtn(
+                    context,
+                    "Terms & Conditions",
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const TermsConditionsPage(),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 30),
@@ -110,6 +152,8 @@ class AboutPage extends StatelessWidget {
               children: [
                 _techLogo('assets/images/Unity.png', 70),
                 _techLogo('assets/images/Android_Studio.png', 50),
+                _techLogo('assets/images/Google__G__logo.svg.png', 45),
+                _techLogo('assets/images/Primary_Vertical_Lockup_Full_Color.png', 40),
               ],
             ),
             const SizedBox(height: 25),
@@ -118,7 +162,9 @@ class AboutPage extends StatelessWidget {
               children: [
                 _techLogo('assets/images/flutter-logo-sharing 1.png', 40),
                 _techLogo('assets/images/Figma-logo.svg 1.png', 40),
+                _techLogo('assets/images/Visual_Studio_Code_1.35_icon.svg.png', 40),
                 _techLogo('assets/images/Google_Gemini_icon_2025.svg 1.png', 40),
+                _techLogoSvg('assets/images/Brand-Github-Copilot--Streamline-Tabler.svg', 40),
               ],
             ),
             const SizedBox(height: 50),
@@ -148,18 +194,29 @@ class AboutPage extends StatelessWidget {
     );
   }
 
-  Widget _buildActionBtn(String label) {
+  Widget _buildActionBtn(BuildContext context, String label, VoidCallback onTap) {
     return ElevatedButton(
-      onPressed: () {},
+      onPressed: onTap,
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF985BEF),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
       ),
-      child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+      ),
     );
   }
 
   Widget _techLogo(String asset, double height) {
     return Image.asset(asset, height: height, errorBuilder: (_, __, ___) => const Icon(Icons.code));
+  }
+
+  Widget _techLogoSvg(String asset, double height) {
+    return SvgPicture.asset(asset, height: height, errorBuilder: (_, __, ___) => const Icon(Icons.code));
   }
 }

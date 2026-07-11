@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:meow_track/router/app_router.dart';
+import 'package:meow_track/core/app_state.dart';
 
-// 🎯 TUKAR KEPADA: StatefulWidget supaya sistem boleh buat kiraan saat & tukar warna teks secara dinamik
 class VerificationScreen extends StatefulWidget {
   const VerificationScreen({super.key});
 
@@ -11,22 +14,37 @@ class VerificationScreen extends StatefulWidget {
 }
 
 class _VerificationScreenState extends State<VerificationScreen> {
-  // 🎯 1. PENGURUS KOTAK INPUT: Sediakan 4 controller dan 4 focus node untuk kawalan lompat
+  // 🎯 1. PENGURUS KOTAK INPUT (Optional for email flow, but keeping UI same)
   final List<TextEditingController> _controllers = List.generate(4, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
 
-  // 🎯 2. LOGIK STATUS RALAT: Set kepada 'false' asal supaya amaran "Invalid code" tak terlepas keluar awal!
   bool _hasError = false;
 
-  // 🎯 3. ENGIN COUNTDOWN RESEND: Pembuat masa randik 60 saat
+  // 🎯 2. ENGIN COUNTDOWN RESEND
   Timer? _timer;
   int _startSeconds = 60;
   bool _isResendAvailable = false;
 
+  // 🎯 3. EMAIL VERIFICATION TIMER
+  Timer? _verificationCheckTimer;
+
   @override
   void initState() {
     super.initState();
-    _startTimer(); // Mula mengira sebaik sahaja skrin dimuatkan
+    _startTimer(); // Resend timer
+    _startEmailVerificationCheck(); // Auto-check if verified
+    
+    // Jika sudah verified tapi peranan belum pilih, tunjuk dialog terus
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (FirebaseAuth.instance.currentUser?.emailVerified == true) {
+        final nextRoute = await appState.resolvePostLoginRoute();
+        if (nextRoute == '/verify-otp') {
+          if (mounted) _showRoleSelectionDialog();
+        } else if (nextRoute != '/verify-otp' && nextRoute != '/auth-gateway') {
+          if (mounted) context.go(nextRoute);
+        }
+      }
+    });
   }
 
   void _startTimer() {
@@ -49,39 +67,109 @@ class _VerificationScreenState extends State<VerificationScreen> {
     });
   }
 
-  void _resendCode() {
-    if (!_isResendAvailable) return;
+  // 🎯 AUTO CHECK LOGIC
+  void _startEmailVerificationCheck() {
+    _verificationCheckTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      final user = FirebaseAuth.instance.currentUser;
+      
+      if (user != null) {
+        await user.reload(); // Refresh user data from Firebase
 
-    // Sini nanti tempat letak logic hantar SMS OTP baru
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Verification code has been resent.')),
-    );
-
-    // Mulakan semula kiraan 60 saat
-    _startTimer();
+        if (user.emailVerified) {
+          timer.cancel();
+          _handlePostVerification();
+        }
+      }
+    });
   }
 
-  void _verifyOtp() {
-    // Gabung input dari 4 kotak menjadi 1 text penuh (Contoh: "1234")
-    String enteredCode = _controllers.map((c) => c.text).join();
-
-    if (enteredCode.length < 4) {
-      setState(() => _hasError = true);
-      return;
-    }
-
-    // 🔴 SIMULASI PENGESAHAN KOD (Boleh tukar ikut sistem backend awak nanti):
-    if (enteredCode == "1234") {
-      setState(() => _hasError = false);
-      context.push('/create-new-password');
+  Future<void> _handlePostVerification() async {
+    final nextRoute = await appState.resolvePostLoginRoute();
+    if (nextRoute == '/verify-otp') {
+      if (mounted) _showRoleSelectionDialog();
     } else {
-      setState(() => _hasError = true); // Jika salah, teks merah "Invalid code" akan dipancarkan
+      if (mounted) context.go(nextRoute);
+    }
+  }
+
+  void _showRoleSelectionDialog() {
+    final bool hasAdmin = appState.availableRoles.contains('admin');
+    // Admin secara automatik boleh akses User Dashboard
+    final bool hasUser = appState.availableRoles.contains('user') || hasAdmin;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Pilih Dashboard", style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text("Sila pilih dashboard untuk memulakan sesi:"),
+        actions: [
+          if (hasUser)
+            TextButton(
+              onPressed: () async {
+                appState.setSessionRole('user');
+                Navigator.pop(ctx);
+                final nextRoute = await appState.resolvePostLoginRoute();
+                if (mounted) context.go(nextRoute);
+              },
+              child: const Text("User Dashboard", style: TextStyle(color: Colors.grey)),
+            ),
+          if (hasAdmin)
+            ElevatedButton(
+              onPressed: () async {
+                appState.setSessionRole('admin');
+                Navigator.pop(ctx);
+                final nextRoute = await appState.resolvePostLoginRoute();
+                if (mounted) context.go(nextRoute);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF985BEF)),
+              child: const Text("Admin Dashboard", style: TextStyle(color: Colors.white)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _resendCode() async {
+    if (!_isResendAvailable) return;
+
+    try {
+      await FirebaseAuth.instance.currentUser?.sendEmailVerification();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Verification email has been resent.')),
+        );
+      }
+      
+      _startTimer(); // Restart 60s countdown
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to resend. Please try again later.')),
+        );
+      }
+    }
+  }
+
+  void _verifyOtp() async {
+    // For real email verification, the user clicks a link. 
+    // This button can be used for "Manual Refresh" check.
+    final user = FirebaseAuth.instance.currentUser;
+    await user?.reload();
+
+    if (user != null && user.emailVerified) {
+      _handlePostVerification();
+    } else {
+      setState(() => _hasError = true); // Shows "Invalid" or "Not verified yet"
     }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _verificationCheckTimer?.cancel();
     for (var controller in _controllers) { controller.dispose(); }
     for (var node in _focusNodes) { node.dispose(); }
     super.dispose();
@@ -89,24 +177,31 @@ class _VerificationScreenState extends State<VerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final userEmail = FirebaseAuth.instance.currentUser?.email ?? "[Your Email]";
+    final bool isVerifiedButNeedsRole = FirebaseAuth.instance.currentUser?.emailVerified == true && appState.needsRoleSelection;
+
     return Scaffold(
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.white, Color(0xFFE8DBFB)],
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [Color(0xFF985BEF), Colors.white, Colors.white],
+            stops: [0.0, 0.25, 1.0],
           ),
         ),
         child: SafeArea(
           child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 30.0),
             child: Column(
               children: [
                 const SizedBox(height: 60),
-                const Text(
-                  'Verification',
-                  style: TextStyle(
+                Text(
+                  isVerifiedButNeedsRole ? 'Account Ready' : 'Verification',
+                  style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
@@ -114,7 +209,9 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'We\'ve sent a 4-digit code to [Phone Number]. Enter it below to continue.',
+                  isVerifiedButNeedsRole 
+                      ? 'Email verified! Please select your preferred dashboard access.'
+                      : 'We\'ve sent a verification link to $userEmail. Please check your inbox and click the link to continue.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -122,96 +219,59 @@ class _VerificationScreenState extends State<VerificationScreen> {
                   ),
                 ),
                 const SizedBox(height: 60),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Enter Verification Code',
-                    style: TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // 🎯 REKAAN BARU PETAK CODE: Guna gelung List.generate bersepadu dengan logik auto-lompat
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(4, (index) {
-                    return Container(
-                      width: 65,
-                      height: 65,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(15),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: TextField(
-                        controller: _controllers[index],
-                        focusNode: _focusNodes[index],
-                        onChanged: (value) {
-                          // 🚀 LOGIK TEKAN NO TERUS MASUK SEBELAH
-                          if (value.isNotEmpty) {
-                            if (index < 3) {
-                              FocusScope.of(context).requestFocus(_focusNodes[index + 1]);
-                            } else {
-                              _focusNodes[index].unfocus(); // Kotak terakhir, simpan keyboard
-                            }
-                          } else {
-                            // 🚀 LOGIK UNDUR (BACKSPACE): Padam terus masuk kotak sebelah kiri balik
-                            if (index > 0) {
-                              FocusScope.of(context).requestFocus(_focusNodes[index - 1]);
-                            }
-                          }
-                          // Padam status ralat kalau user taip balik nombor baharu
-                          if (_hasError) setState(() => _hasError = false);
-                        },
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.number,
-                        maxLength: 1,
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                        decoration: const InputDecoration(
-                          counterText: "",
-                          border: InputBorder.none,
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 20),
-
-                // 🎯 BUTANG RESEND PINTAR: Automatik tunjuk baki saat mengikut state pemasa
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('If you didn\'t receive a code, ', style: TextStyle(color: Colors.grey[600])),
-                    GestureDetector(
-                      onTap: _isResendAvailable ? _resendCode : null,
-                      child: Text(
-                        _isResendAvailable ? 'Resend' : 'Resend (${_startSeconds}s)',
-                        style: TextStyle(
-                            color: _isResendAvailable ? const Color(0xFF985BEF) : Colors.grey,
-                            fontWeight: FontWeight.bold
-                        ),
-                      ),
+                if (!isVerifiedButNeedsRole) ...[
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Checking status...',
+                      style: TextStyle(fontWeight: FontWeight.w500),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(color: Color(0xFF985BEF)),
+                      const SizedBox(width: 20),
+                      Text("Waiting for verification...", style: TextStyle(color: Colors.grey[700])),
+                    ],
+                  ),
+                ] else ...[
+                   const Icon(Icons.check_circle, color: Colors.green, size: 80),
+                   const SizedBox(height: 20),
+                   const Text("Status: Verified", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                ],
+                
+                const SizedBox(height: 60),
+
+                if (!isVerifiedButNeedsRole)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('If you didn\'t receive the email, ', style: TextStyle(color: Colors.grey[600])),
+                      GestureDetector(
+                        onTap: _isResendAvailable ? _resendCode : null,
+                        child: Text(
+                          _isResendAvailable ? 'Resend' : 'Resend (${_startSeconds}s)',
+                          style: TextStyle(
+                              color: _isResendAvailable ? const Color(0xFF985BEF) : Colors.grey,
+                              fontWeight: FontWeight.bold
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 15),
 
-                // 🎯 RALAT DIKAWAL: Hanya akan dipaparkan jika '_hasError' disahkan 'true'
                 if (_hasError)
                   const Text(
-                    'Invalid code. Please try again.',
+                    'Email not verified yet. Please click the link in your email.',
                     style: TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
                   ),
 
                 const SizedBox(height: 60),
                 ElevatedButton(
-                  onPressed: _verifyOtp,
+                  onPressed: isVerifiedButNeedsRole ? _showRoleSelectionDialog : _verifyOtp,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF985BEF),
                     minimumSize: const Size(double.infinity, 56),
@@ -220,9 +280,9 @@ class _VerificationScreenState extends State<VerificationScreen> {
                     ),
                     elevation: 0,
                   ),
-                  child: const Text(
-                    'Verify',
-                    style: TextStyle(
+                  child: Text(
+                    isVerifiedButNeedsRole ? 'Select Role' : 'Check Verification Status',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -231,7 +291,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: () => context.go('/login'),
+                  onPressed: () => context.go(AppRouter.login),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 56),

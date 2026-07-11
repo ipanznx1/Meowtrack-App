@@ -75,7 +75,7 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
                       ],
                     ),
                     const SizedBox(height: 30),
-                    _buildInfoItem('When', '${widget.appointment.date} at ${widget.appointment.time}'),
+                    _buildInfoItem('When', _formatAppointmentDate(widget.appointment.scheduledAt)),
                     const SizedBox(height: 30),
                     _buildInfoItem('Where', widget.appointment.location),
                   ],
@@ -102,9 +102,9 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
               ),
               const SizedBox(height: 40),
 
-              // ✅ RESCHEDULE BUTTON — buka date & time picker
+              // ✅ RESCHEDULE BUTTON — navigate to edit appointment screen
               ElevatedButton(
-                onPressed: () => _showRescheduleDialog(context),
+                onPressed: () => context.push('/edit-appointment', extra: widget.appointment),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFB0BEC5),
                   minimumSize: const Size(300, 60),
@@ -212,14 +212,24 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
         '${selectedDate.day} ${_monthName(selectedDate.month)} ${selectedDate.year}';
     final String formattedTime = selectedTime.format(context);
 
+    // Build the new DateTime from the selected date and time
+    final DateTime updatedScheduledAt = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
+
     // ✅ UPDATE GLOBAL STATE
     final updatedAppt = Appointment(
+      id: widget.appointment.id,
       catName: widget.appointment.catName,
       type: widget.appointment.type,
-      date: formattedDate,
-      time: formattedTime,
+      scheduledAt: updatedScheduledAt,
       location: widget.appointment.location,
       description: widget.appointment.description,
+      notifyBefore: widget.appointment.notifyBefore,
     );
     appState.updateAppointment(widget.appointment, updatedAppt);
 
@@ -340,5 +350,13 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
       ),
       child: Image.network(url, width: 60, height: 60),
     );
+  }
+
+  String _formatAppointmentDate(DateTime dateTime) {
+    final monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final suffix = dateTime.hour >= 12 ? 'PM' : 'AM';
+    return '${dateTime.day} ${monthNames[dateTime.month - 1]} ${dateTime.year} at $hour:$minute $suffix';
   }
 }

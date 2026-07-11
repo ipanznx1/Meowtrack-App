@@ -1,23 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:meow_track/features/auth/presentation/widgets/auth_background_wrapper.dart';
+import 'package:meow_track/router/app_router.dart';
 
-class ForgotPasswordScreen extends StatelessWidget {
+class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
+
+  @override
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+}
+
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final TextEditingController _emailController = TextEditingController();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  void _handleSendResetEmail() {
+    final email = _emailController.text.trim();
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email / username.')),
+      );
+      return;
+    }
+
+    // Logic for sending reset email/otp would go here
+    print('Sending reset code to: $email');
+    
+    // Navigate to Verification screen
+    context.push(AppRouter.verifyOtp);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.white, Color(0xFFE8DBFB)],
-          ),
-        ),
+      resizeToAvoidBottomInset: false, // Background stays full even when keyboard is up
+      body: AuthBackgroundWrapper(
         child: SafeArea(
           child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 30.0),
             child: Column(
               children: [
@@ -33,38 +60,13 @@ class ForgotPasswordScreen extends StatelessWidget {
                 const SizedBox(height: 60),
                 _buildLabel('Email / Username'),
                 _buildTextField(
+                  controller: _emailController,
                   hintText: 'Email / Username',
                   icon: 'assets/icons/Email.svg',
                 ),
-                const SizedBox(height: 30),
-                _buildLabel('Phone Number'),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          Image.network('https://flagcdn.com/w40/my.png', width: 24),
-                          SvgPicture.asset('assets/icons/Dropdown.svg', width: 24, height: 24, color: const Color(0xFF985BEF)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildTextField(
-                        hintText: 'Enter phone number',
-                        icon: 'assets/icons/Phone Number.svg',
-                      ),
-                    ),
-                  ],
-                ),
                 const SizedBox(height: 50),
                 ElevatedButton(
-                  onPressed: () => context.push('/verify-otp'),
+                  onPressed: _handleSendResetEmail,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF985BEF),
                     minimumSize: const Size(double.infinity, 56),
@@ -123,19 +125,30 @@ class ForgotPasswordScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTextField({required String hintText, required Object icon}) {
+  Widget _buildTextField({required TextEditingController controller, required String hintText, required Object icon}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: TextField(
+        controller: controller,
         decoration: InputDecoration(
           hintText: hintText,
           hintStyle: TextStyle(color: Colors.grey[400]),
-          suffixIcon: (icon is String)
-              ? SvgPicture.asset(icon, color: const Color(0xFF985BEF).withOpacity(0.5), width: 22, height: 22)
-              : Icon(icon as IconData, color: const Color(0xFF985BEF).withOpacity(0.5)),
+          suffixIcon: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: (icon is String)
+                ? SvgPicture.asset(icon, colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn), width: 20, height: 20)
+                : Icon(icon as IconData, color: const Color(0xFF985BEF), size: 20),
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
         ),

@@ -1,13 +1,12 @@
 import 'dart:convert';
-import 'dart:typed_data';
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:meow_track/core/app_state.dart';
+import 'package:meow_track/router/app_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class VetDirectoryPage extends StatefulWidget {
   const VetDirectoryPage({super.key});
@@ -18,7 +17,11 @@ class VetDirectoryPage extends StatefulWidget {
 
 class _VetDirectoryPageState extends State<VetDirectoryPage> {
   static const String _googlePlacesApiKey = 'AIzaSyAGz4NvKPo3GGXd9pe9CYGOTRf64FNt8Bo';
+  static const double initialRadius = 5000; // 5km
+  static const double maxRadius = 25000; // 25km
+
   bool _isMapView = true;
+  bool _onlyOpenNow = false;
   GoogleMapController? _mapController;
   Position? _currentPosition;
   bool _mapReady = false;
@@ -30,26 +33,52 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
   String? _nextPageToken;
   bool _hasMoreVets = false;
 
-  // Clinic list populated from Google Places.
   List<Map<String, dynamic>> _clinics = [];
+  List<Map<String, dynamic>> _filteredClinics = [];
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _checkLocationPermission();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _mapController = null;
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    _applyFilters();
+  }
+
+  void _applyFilters() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _filteredClinics = _clinics.where((clinic) {
+        final name = (clinic['name'] ?? '').toString().toLowerCase();
+        final matchesSearch = name.contains(query);
+        final isOpen = clinic['isOpen'] == true;
+        
+        if (_onlyOpenNow) {
+          return matchesSearch && isOpen;
+        }
+        return matchesSearch;
+      }).toList();
+    });
   }
 
   Future<void> _checkLocationPermission() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       setState(() => _permissionDenied = true);
       return;
     }
 
-    permission = await Geolocator.checkPermission();
+    LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
@@ -66,29 +95,28 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
     try {
       _currentPosition = await Geolocator.getCurrentPosition();
       if (_currentPosition != null) {
-        await _fetchNearbyVets();
+        await _startSmartSearch();
       }
       if (_mapController != null && _currentPosition != null) {
         _moveCameraToCurrentLocation();
       }
     } catch (_) {
       setState(() => _permissionDenied = true);
-      return;
     }
-
     if (mounted) setState(() {});
   }
 
-  Future<void> _fetchNearbyVets([String? pageToken, int retryCount = 0]) async {
-    if (_currentPosition == null) return;
-    if (pageToken == null && _hasFetchedPlaces) return;
-    if (pageToken != null && (_placesLoading || _isMoreLoading)) return;
-    if (_googlePlacesApiKey.isEmpty || _googlePlacesApiKey == 'YOUR_GOOGLE_PLACES_API_KEY') {
-      setState(() {
-        _placesError = 'Google Places API key is missing in Dart code.';
-      });
-      return;
+  Future<void> _startSmartSearch() async {
+    bool found = await _fetchNearbyVets(radius: initialRadius);
+    if (!found && mounted) {
+      await _fetchNearbyVets(radius: maxRadius);
     }
+  }
+
+  Future<bool> _fetchNearbyVets({String? pageToken, double? radius, int retryCount = 0}) async {
+    if (_currentPosition == null) return false;
+    if (pageToken == null && _hasFetchedPlaces && radius == null) return false;
+    if (pageToken != null && (_placesLoading || _isMoreLoading)) return false;
 
     setState(() {
       if (pageToken == null) {
@@ -101,195 +129,205 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
 
     final params = {
       'location': '${_currentPosition!.latitude},${_currentPosition!.longitude}',
-      'radius': '5000',
+      'radius': (radius ?? initialRadius).toStringAsFixed(0),
       'type': 'veterinary_care',
+      'keyword': 'veterinary clinic',
       'key': _googlePlacesApiKey,
     };
-    if (pageToken != null) {
-      params['pagetoken'] = pageToken;
-    }
-    final url = Uri.https(
-      'maps.googleapis.com',
-      '/maps/api/place/nearbysearch/json',
-      params,
-    );
+    if (pageToken != null) params['pagetoken'] = pageToken;
+
+    final url = Uri.https('maps.googleapis.com', '/maps/api/place/nearbysearch/json', params);
 
     try {
       final response = await http.get(url);
       if (response.statusCode != 200) {
         setState(() {
-          _placesError = 'Places request failed: ${response.statusCode}';
+          _placesError = 'Request failed';
           _placesLoading = false;
           _isMoreLoading = false;
-          _hasFetchedPlaces = true;
         });
-        return;
+        return false;
       }
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final status = body['status'] as String? ?? 'UNKNOWN';
-      final errorMessage = body['error_message'] as String?;
       final nextPageToken = body['next_page_token'] as String?;
       final results = (body['results'] as List<dynamic>?) ?? <dynamic>[];
 
       if (pageToken != null && status == 'INVALID_REQUEST' && retryCount < 3) {
         await Future.delayed(const Duration(seconds: 2));
-        return _fetchNearbyVets(pageToken, retryCount + 1);
+        return _fetchNearbyVets(pageToken: pageToken, radius: radius, retryCount: retryCount + 1);
       }
+
       if (status != 'OK') {
         setState(() {
           if (status == 'ZERO_RESULTS') {
-            _placesError = 'No nearby veterinary clinics found.';
-          } else if (status == 'REQUEST_DENIED') {
-            _placesError = 'Places request denied: check your API key restrictions (app/package restrictions are not allowed for HTTP REST calls).';
+            _placesError = (radius == maxRadius) ? 'Tiada klinik berdekatan' : null;
           } else {
-            _placesError = 'Places API error: $status${errorMessage != null ? ' - $errorMessage' : ''}';
+            _placesError = 'API Error: $status';
           }
           _placesLoading = false;
           _isMoreLoading = false;
           _hasMoreVets = false;
-          _hasFetchedPlaces = true;
+          if (pageToken == null) _hasFetchedPlaces = true;
         });
-        return;
-      }
-
-      if (results.isEmpty) {
-        setState(() {
-          _placesError = 'No nearby veterinary clinics found.';
-          _placesLoading = false;
-          _hasFetchedPlaces = true;
-        });
-        return;
+        return false;
       }
 
       final places = results.map<Map<String, dynamic>>((place) {
-        final location = place['geometry']['location'] as Map<String, dynamic>;
-        final name = place['name'] as String? ?? 'Vet Clinic';
-        final rating = (place['rating'] is num) ? (place['rating'] as num).toDouble() : 4.5;
-        final isOpen = place['opening_hours']?['open_now'] ?? false;
-        final placeId = place['place_id'] as String? ?? '';
-        final photoRefs = (place['photos'] as List<dynamic>?)
-                ?.map((item) => (item as Map<String, dynamic>)['photo_reference'] as String?)
-                .where((ref) => ref != null && ref.isNotEmpty)
-                .cast<String>()
-                .toList() ?? <String>[];
-
-        final mainPhoto = photoRefs.isNotEmpty ? _getPlacePhotoUrl(photoRefs.first) : '';
-        final galleryPhotos = photoRefs.length > 1
-            ? photoRefs.skip(1).take(3).map(_getPlacePhotoUrl).toList()
-            : <String>[];
+        final location = (place['geometry']['location'] as Map<String, dynamic>?) ?? {};
+        final photoRefs = (place['photos'] as List<dynamic>?)?.map((i) => i['photo_reference'] as String?).whereType<String>().toList() ?? [];
+        final image = photoRefs.isNotEmpty ? _getPlacePhotoUrl(photoRefs.first) : '';
+        final gallery = photoRefs.skip(1).take(3).map(_getPlacePhotoUrl).toList();
 
         return {
-          'name': name,
-          'rating': rating,
-          'distance': '',
-          'isOpen': isOpen,
-          'location': LatLng(location['lat'] as double, location['lng'] as double),
-          'image': mainPhoto,
-          'gallery': galleryPhotos,
-          'phone': '',
-          'placeId': placeId,
-          'vicinity': place['vicinity'] as String? ?? '',
+          'name': place['name'] as String? ?? 'Vet Clinic',
+          'rating': (place['rating'] is num) ? (place['rating'] as num).toDouble() : 4.5,
+          'isOpen': (place['opening_hours']?['open_now'] as bool?) ?? false,
+          'location': LatLng((location['lat'] as num?)?.toDouble() ?? 0.0, (location['lng'] as num?)?.toDouble() ?? 0.0),
+          'image': image,
+          'gallery': gallery,
+          'placeId': place['place_id'] as String? ?? '',
+          'vicinity': place['vicinity'] as String? ?? 'No address provided',
         };
       }).toList();
 
       setState(() {
-        if (places.isNotEmpty) {
-          final newPlaces = places.map((place) {
-            final location = place['location'] as LatLng;
-            final distanceMeters = Geolocator.distanceBetween(
-              _currentPosition!.latitude,
-              _currentPosition!.longitude,
-              location.latitude,
-              location.longitude,
-            );
-            place['distance'] = '${(distanceMeters / 1000).toStringAsFixed(1)} km away';
+        final processed = places.map((p) {
+          final loc = p['location'] as LatLng;
+          final dist = Geolocator.distanceBetween(_currentPosition!.latitude, _currentPosition!.longitude, loc.latitude, loc.longitude);
+          p['distance'] = '${(dist / 1000).toStringAsFixed(1)} km away';
+          return p;
+        }).toList();
 
-            final gallery = (place['gallery'] as List<String>).toList();
-            while (gallery.length < 3) {
-              gallery.add(place['image'] as String? ?? '');
-            }
-            place['gallery'] = gallery.take(3).toList();
-
-            return place;
-          }).toList();
-          _clinics = pageToken == null ? newPlaces : [..._clinics, ...newPlaces];
-          _nextPageToken = nextPageToken;
-          _hasMoreVets = nextPageToken != null && nextPageToken.isNotEmpty;
-        }
+        _clinics = pageToken == null ? processed : [..._clinics, ...processed];
+        _filteredClinics = _clinics;
+        _nextPageToken = nextPageToken;
+        _hasMoreVets = nextPageToken != null && nextPageToken.isNotEmpty;
         _placesLoading = false;
         _isMoreLoading = false;
         if (pageToken == null) _hasFetchedPlaces = true;
       });
-    } catch (error) {
+      return true;
+    } catch (e) {
       setState(() {
-        _placesError = error.toString();
+        _placesError = e.toString();
         _placesLoading = false;
         _isMoreLoading = false;
-        _hasFetchedPlaces = true;
       });
+      return false;
     }
   }
 
   void _loadMoreVets() {
-    if (_nextPageToken == null || _nextPageToken!.isEmpty) return;
-    _fetchNearbyVets(_nextPageToken);
+    if (_nextPageToken != null) _fetchNearbyVets(pageToken: _nextPageToken);
   }
 
   Future<void> _moveCameraToCurrentLocation() async {
     if (_mapController == null || _currentPosition == null) return;
-    await _mapController!.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-          zoom: 14,
-        ),
-      ),
-    );
+    await _mapController!.animateCamera(CameraUpdate.newLatLngZoom(LatLng(_currentPosition!.latitude, _currentPosition!.longitude), 14));
   }
+
   String _getPlacePhotoUrl(String photoReference) {
-    return Uri.https(
-      'maps.googleapis.com',
-      '/maps/api/place/photo',
-      {
-        'maxwidth': '400',
-        'photoreference': photoReference,
-        'key': _googlePlacesApiKey,
-      },
-    ).toString();
+    return Uri.https('maps.googleapis.com', '/maps/api/place/photo', {'maxwidth': '400', 'photoreference': photoReference, 'key': _googlePlacesApiKey}).toString();
   }
 
-  Future<List<Map<String, dynamic>>> _fetchPlaceReviews(String placeId) async {
-    if (placeId.isEmpty) return [];
+  Future<void> _launchMapDirections(double lat, double lng) async {
+    final url = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving");
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      throw 'Could not launch $url';
+    }
+  }
 
-    final url = Uri.https(
-      'maps.googleapis.com',
-      '/maps/api/place/details/json',
-      {
-        'place_id': placeId,
-        'fields': 'reviews',
-        'key': _googlePlacesApiKey,
-      },
-    );
+  Future<Map<String, dynamic>> _fetchClinicExtraDetails(String placeId) async {
+    if (placeId.isEmpty) return {'phone': '', 'reviews': [], 'hours': 'Not available'};
+    final url = Uri.https('maps.googleapis.com', '/maps/api/place/details/json', {
+      'place_id': placeId, 
+      'fields': 'reviews,formatted_phone_number,international_phone_number,opening_hours', 
+      'key': _googlePlacesApiKey
+    });
 
     try {
       final response = await http.get(url);
-      if (response.statusCode != 200) return [];
-
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200) return {'phone': '', 'reviews': [], 'hours': 'Not available'};
+      final body = jsonDecode(response.body);
       final result = body['result'] as Map<String, dynamic>?;
+      
+      final phone = result?['international_phone_number'] ?? result?['formatted_phone_number'] ?? '';
       final reviews = (result?['reviews'] as List<dynamic>?) ?? [];
+      
+      // Get current day's opening hours
+      String todayHours = 'Closed today';
+      final openingHours = result?['opening_hours'] as Map<String, dynamic>?;
+      if (openingHours != null) {
+        final weekdayText = openingHours['weekday_text'] as List<dynamic>?;
+        if (weekdayText != null && weekdayText.isNotEmpty) {
+          // Find today's text (Google usually returns Monday-Sunday)
+          final now = DateTime.now();
+          // Adjust for Google index (Monday is 0 in weekdayText, but in DateTime 1 is Monday)
+          int googleIdx = now.weekday - 1; 
+          if (googleIdx >= 0 && googleIdx < weekdayText.length) {
+            todayHours = weekdayText[googleIdx].toString().split(': ').last;
+          }
+        } else if (openingHours['open_now'] != null) {
+          todayHours = (openingHours['open_now'] as bool) ? "Open Now" : "Closed Now";
+        }
+      }
 
-      return reviews
-          .map<Map<String, dynamic>>((review) => {
-                'name': review['author_name'] ?? 'Anonymous',
-                'rating': review['rating'] ?? 0,
-                'comment': review['text'] ?? '',
-                'time': review['relative_time_description'] ?? '',
-              })
-          .toList();
+      return {
+        'phone': phone,
+        'hours': todayHours,
+        'reviews': reviews.map<Map<String, dynamic>>((r) => {
+          'name': r['author_name'] ?? 'Anon', 
+          'rating': r['rating'] ?? 0, 
+          'comment': r['text'] ?? '', 
+          'time': r['relative_time_description'] ?? ''
+        }).toList()
+      };
     } catch (_) {
-      return [];
+      return {'phone': '', 'reviews': [], 'hours': 'Not available'};
+    }
+  }
+
+  void _showClinicDetails(Map<String, dynamic> clinicMap) async {
+    // Tunjukkan loading overlay
+    final loadingOverlay = OverlayEntry(
+      builder: (context) => Container(
+        color: Colors.black.withOpacity(0.3),
+        child: const Center(child: CircularProgressIndicator(color: Color(0xFF985BEF))),
+      ),
+    );
+    Overlay.of(context).insert(loadingOverlay);
+
+    try {
+      // PENTING: Gunakan 'placeId' (bukan place_id)
+      final String pid = clinicMap['placeId'] ?? clinicMap['place_id'] ?? '';
+      final extra = await _fetchClinicExtraDetails(pid);
+      
+      loadingOverlay.remove();
+      if (!mounted) return;
+
+      final clinic = VetClinic(
+        name: clinicMap['name']?.toString() ?? 'Vet Clinic',
+        rating: (clinicMap['rating'] ?? 4.5).toString(),
+        distance: clinicMap['distance']?.toString() ?? 'Nearby',
+        hours: extra['hours'] ?? '10:00 AM - 10:00 PM',
+        phone: extra['phone'] ?? '',
+        whatsapp: extra['phone'] ?? '',
+        headerImage: clinicMap['image']?.toString() ?? '',
+        gallery: clinicMap['gallery'] != null ? List<String>.from(clinicMap['gallery']) : [],
+        description: clinicMap['vicinity']?.toString() ?? 'Professional veterinary services.',
+        lat: (clinicMap['location'] as LatLng).latitude,
+        lng: (clinicMap['location'] as LatLng).longitude,
+        reviews: extra['reviews'] ?? [],
+      );
+
+      context.push(AppRouter.vetClinicDetails, extra: clinic);
+    } catch (e) {
+      loadingOverlay.remove();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Unable to load clinic details.")));
+      }
     }
   }
 
@@ -299,25 +337,10 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // Header
           _buildHeader(),
-          if (_placesLoading)
-            const LinearProgressIndicator(minHeight: 3),
-          if (_placesError != null)
-            Container(
-              width: double.infinity,
-              color: Colors.red.shade50,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Text(
-                'Places API issue: $_placesError',
-                style: const TextStyle(color: Colors.red, fontSize: 13),
-              ),
-            ),
-          
-          // Map or List - fills remaining space
-          Expanded(
-            child: _isMapView ? _buildMapView() : _buildListView(),
-          ),
+          if (_placesLoading) const LinearProgressIndicator(minHeight: 3),
+          if (_placesError != null) Container(width: double.infinity, color: Colors.red.shade50, padding: const EdgeInsets.all(10), child: Text(_placesError!, style: const TextStyle(color: Colors.red, fontSize: 12))),
+          Expanded(child: _isMapView ? _buildMapView() : _buildListView()),
         ],
       ),
     );
@@ -326,63 +349,61 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.only(top: 60, left: 20, right: 20, bottom: 18),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
-      ),
       child: Column(
         children: [
           Row(
             children: [
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F8),
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: Row(
-                    children: const [
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Search...',
-                            border: InputBorder.none,
-                          ),
-                        ),
-                      ),
-                      Icon(Icons.search, color: Color(0xFF985BEF)),
-                    ],
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(color: const Color(0xFFF5F5F8), borderRadius: BorderRadius.circular(22)),
+                  child: TextField(controller: _searchController, decoration: const InputDecoration(hintText: 'Search...', border: InputBorder.none, suffixIcon: Icon(Icons.search, color: Color(0xFF985BEF)))),
                 ),
               ),
               const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F5F8),
-                  borderRadius: BorderRadius.circular(18),
+              GestureDetector(
+                onTap: () {
+                  setState(() => _onlyOpenNow = !_onlyOpenNow);
+                  _applyFilters();
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12), 
+                  decoration: BoxDecoration(
+                    color: _onlyOpenNow ? const Color(0xFF985BEF).withOpacity(0.1) : const Color(0xFFF5F5F8), 
+                    borderRadius: BorderRadius.circular(18),
+                    border: _onlyOpenNow ? Border.all(color: const Color(0xFF985BEF)) : null,
+                  ), 
+                  child: Icon(Icons.access_time_filled, color: _onlyOpenNow ? const Color(0xFF985BEF) : Colors.grey)
                 ),
-                child: const Icon(Icons.tune, color: Color(0xFF985BEF)),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          Center(
-            child: ElevatedButton(
-              onPressed: () => setState(() => _isMapView = !_isMapView),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF985BEF),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                elevation: 8,
-                shadowColor: const Color(0xFF985BEF).withOpacity(0.35),
-                minimumSize: const Size(160, 48),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: () => setState(() => _isMapView = !_isMapView),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF985BEF), 
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)), 
+                  minimumSize: const Size(140, 48)
+                ),
+                child: Text(_isMapView ? 'List view' : 'Map view', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
-              child: Text(
-                _isMapView ? 'List view' : 'Map view',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
+              if (_onlyOpenNow) ...[
+                const SizedBox(width: 10),
+                Chip(
+                  label: const Text("Open Now", style: TextStyle(color: Colors.white, fontSize: 10)),
+                  backgroundColor: const Color(0xFF985BEF),
+                  deleteIcon: const Icon(Icons.close, size: 12, color: Colors.white),
+                  onDeleted: () {
+                    setState(() => _onlyOpenNow = false);
+                    _applyFilters();
+                  },
+                ),
+              ]
+            ],
           ),
         ],
       ),
@@ -390,145 +411,34 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
   }
 
   Widget _buildListView() {
-    // Sort clinics by distance if we have current position
-    List<Map<String, dynamic>> sortedClinics = _clinics;
-    if (_currentPosition != null) {
-      sortedClinics = List.from(_clinics)..sort((a, b) {
-        double distA = Geolocator.distanceBetween(
-          _currentPosition!.latitude,
-          _currentPosition!.longitude,
-          a['location'].latitude,
-          a['location'].longitude,
-        );
-        double distB = Geolocator.distanceBetween(
-          _currentPosition!.latitude,
-          _currentPosition!.longitude,
-          b['location'].latitude,
-          b['location'].longitude,
-        );
-        return distA.compareTo(distB);
-      });
-    }
-
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: sortedClinics.length + (_hasMoreVets ? 1 : 0),
+      itemCount: _filteredClinics.length + (_hasMoreVets ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index == sortedClinics.length) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Center(
-              child: ElevatedButton(
-                onPressed: _isMoreLoading ? null : _loadMoreVets,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF985BEF),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                  padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 14),
-                ),
-                child: _isMoreLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('Next page', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
+        if (index == _filteredClinics.length) return Center(child: TextButton(onPressed: _isMoreLoading ? null : _loadMoreVets, child: const Text('Load More')));
+        final clinic = _filteredClinics[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ListTile(
+            onTap: () => _showClinicDetails(clinic),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: clinic['image'].isNotEmpty 
+                ? Image.network(clinic['image'], width: 60, height: 60, fit: BoxFit.cover)
+                : Container(width: 60, height: 60, color: Colors.grey[200], child: const Icon(Icons.local_hospital)),
             ),
-          );
-        }
-        final clinic = sortedClinics[index];
-        return GestureDetector(
-          onTap: () => _showClinicDetails(clinic),
-          child: Card(
-            margin: const EdgeInsets.only(bottom: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Clinic name
-                  Text(
-                    clinic['name'],
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  // Rating and distance in row
-                  Row(
-                    children: [
-                      // Stars
-                      Row(
-                        children: List.generate(5, (i) => 
-                          const Icon(Icons.star, color: Colors.amber, size: 14)
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text('${clinic['rating']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                      const Spacer(),
-                      Text(clinic['distance'], style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Hours
-                  Row(
-                    children: [
-                      const Icon(Icons.access_time, size: 14, color: Colors.grey),
-                      const SizedBox(width: 6),
-                      Text('10:00 AM to 10:00 PM', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Action buttons
-                  Row(
-                    children: [
-                      // Phone button
-                      Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF5F5F5),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.all(10),
-                        child: const Icon(Icons.phone, color: Color(0xFF7C3AED), size: 18),
-                      ),
-                      const SizedBox(width: 12),
-                      
-                      // WhatsApp button
-                      Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF5F5F5),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.all(10),
-                        child: const Icon(Icons.message, color: Color(0xFF7C3AED), size: 18),
-                      ),
-                      const Spacer(),
-                      
-                      // Status badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: clinic['isOpen'] ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          clinic['isOpen'] ? 'Open' : 'Closed',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: clinic['isOpen'] ? Colors.green : Colors.red,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            title: Text(clinic['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            subtitle: Text('${clinic['rating']} ⭐ • ${clinic['distance']}'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.directions, color: Color(0xFF985BEF)),
+                  onPressed: () => _launchMapDirections(clinic['location'].latitude, clinic['location'].longitude),
+                ),
+                Icon(Icons.circle, color: clinic['isOpen'] ? Colors.green : Colors.red, size: 10),
+              ],
             ),
           ),
         );
@@ -537,517 +447,18 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
   }
 
   Widget _buildMapView() {
-    // Build markers for clinics
-    final markers = _clinics.map((clinic) {
-      return Marker(
-        markerId: MarkerId(clinic['name']),
-        position: clinic['location'],
-        infoWindow: InfoWindow(title: clinic['name'], snippet: clinic['distance']),
-        onTap: () => _showClinicDetails(clinic),
-      );
-    }).toSet();
-
-    // Build circles for each clinic (small highlight) and a radius around current location
-    final circles = <Circle>{};
-    for (final clinic in _clinics) {
-      circles.add(Circle(
-        circleId: CircleId(clinic['name']),
-        center: clinic['location'],
-        radius: 200, // 200 meters highlight around clinic
-        fillColor: Colors.blue.withOpacity(0.12),
-        strokeColor: Colors.blue.withOpacity(0.4),
-        strokeWidth: 1,
-      ));
-    }
-
-    if (_currentPosition != null) {
-      circles.add(Circle(
-        circleId: const CircleId('current_location'),
-        center: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-        radius: 50,
-        fillColor: Colors.green.withOpacity(0.3),
-        strokeColor: Colors.green.withOpacity(0.6),
-        strokeWidth: 2,
-      ));
-    }
-
-    if (_currentPosition != null) {
-      final center = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
-      circles.add(Circle(
-        circleId: const CircleId('current_location_radius'),
-        center: center,
-        radius: 1000, // 1km radius showing available shops
-        fillColor: Colors.green.withOpacity(0.06),
-        strokeColor: Colors.green.withOpacity(0.35),
-        strokeWidth: 1,
-      ));
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final initialPosition = _currentPosition != null
-            ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
-            : const LatLng(3.1319, 101.6840);
-
-        return SizedBox(
-          width: constraints.maxWidth,
-          height: constraints.maxHeight,
-          child: Stack(
-            children: [
-              SizedBox.expand(
-                child: GoogleMap(
-                  initialCameraPosition: CameraPosition(target: initialPosition, zoom: 13),
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                    setState(() {
-                      _mapReady = true;
-                    });
-                    if (_currentPosition != null) {
-                      _moveCameraToCurrentLocation();
-                    }
-                  },
-                  markers: markers,
-                  circles: circles,
-                  myLocationEnabled: true,
-                  zoomControlsEnabled: true,
-                  mapToolbarEnabled: true,
-                  myLocationButtonEnabled: true,
-                  compassEnabled: true,
-                  mapType: MapType.normal,
-                ),
-              ),
-              if (_permissionDenied)
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.95),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 12)],
-                    ),
-                    child: const Text(
-                      'Location permission denied. Showing nearby clinics by default.',
-                      style: TextStyle(color: Colors.black87),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              if (_currentPosition == null)
-                Positioned(
-                  top: 80,
-                  left: 20,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.65),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: const Text('Detecting location...', style: TextStyle(color: Colors.white)),
-                  ),
-                ),
-              Positioned(
-                top: 20,
-                right: 20,
-                child: _MapStatusBanner(
-                  message: _mapReady ? 'Map ready (${markers.length} markers)' : 'Loading map...'
-                ),
-              ),
-              Positioned(
-                bottom: 24,
-                right: 20,
-                child: FloatingActionButton(
-                  onPressed: _moveCameraToCurrentLocation,
-                  backgroundColor: const Color(0xFF985BEF),
-                  child: const Icon(Icons.my_location),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showClinicDetails(Map<String, dynamic> clinic) async {
-    // Fetch reviews from Google Places
-    final reviews = await _fetchPlaceReviews(clinic['placeId'] as String? ?? '');
-    clinic['reviews'] = reviews;
-
-    if (!mounted) return;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.35),
-      isDismissible: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-      ),
-      builder: (context) {
-        final topPadding = MediaQuery.of(context).padding.top;
-
-        return DraggableScrollableSheet(
-          initialChildSize: 0.78,
-          minChildSize: 0.55,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (context, scrollController) {
-            return SafeArea(
-              child: Container(
-                margin: const EdgeInsets.only(top: 6),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-                ),
-                child: _buildClinicDetailsContent(clinic, topPadding, scrollController),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildClinicDetailsContent(Map<String, dynamic> clinic, double topPadding, ScrollController scrollController) {
-    final gallery = (clinic['gallery'] as List<dynamic>?)?.cast<String>() ?? [];
-    final String mainPhoto = (clinic['image'] as String?)?.isNotEmpty == true
-        ? clinic['image'] as String
-        : gallery.isNotEmpty
-            ? gallery.first
-            : '';
-
-    final List<String> uniqueGallery = gallery
-        .where((url) => url.isNotEmpty)
-        .toSet()
-        .toList();
-
-    final List<String> display = uniqueGallery.take(3).toList();
-    while (display.length < 3) {
-      display.add('');
-    }
-
     return Stack(
       children: [
-        SingleChildScrollView(
-          controller: scrollController,
-          child: Column(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                child: mainPhoto.isNotEmpty
-                    ? Image.network(
-                        mainPhoto,
-                        height: 250,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          height: 250,
-                          width: double.infinity,
-                          color: Colors.grey[200],
-                          child: const Icon(Icons.photo, color: Colors.grey, size: 60),
-                        ),
-                      )
-                    : Container(
-                        height: 250,
-                        width: double.infinity,
-                        color: Colors.grey[200],
-                        child: const Icon(Icons.photo, color: Colors.grey, size: 60),
-                      ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(25.0),
-                child: Column(
-                  children: [
-                    Text(
-                      clinic['name'],
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      width: 60,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    _buildReviewsSection((clinic['reviews'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? []),
-                    const SizedBox(height: 30),
-                    const Text('Distance', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text(clinic['distance'], style: const TextStyle(color: Colors.grey)),
-                    const SizedBox(height: 20),
-                    const Text('Open hours', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const Text('10:00 AM to 10:00 PM', style: TextStyle(color: Colors.grey)),
-                    const SizedBox(height: 30),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildActionCircle(Icons.phone_outlined, () => launchUrl(Uri.parse('tel:${clinic['phone']}'))),
-                        const SizedBox(width: 20),
-                        _buildActionCircle(Icons.chat_bubble_outline, () => launchUrl(Uri.parse('https://wa.me/60123456789'))),
-                      ],
-                    ),
-                    const SizedBox(height: 40),
-                    const Text('Get Directions to Clinic', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildNavIcon('https://cdn-icons-png.flaticon.com/512/2991/2991148.png'),
-                        const SizedBox(width: 30),
-                        _buildNavIcon('https://cdn-icons-png.flaticon.com/512/5969/5969244.png'),
-                      ],
-                    ),
-                    const SizedBox(height: 50),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        GoogleMap(
+          initialCameraPosition: CameraPosition(target: _currentPosition != null ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude) : const LatLng(3.1319, 101.6840), zoom: 13),
+          onMapCreated: (c) => _mapController = c,
+          markers: _filteredClinics.map((c) => Marker(markerId: MarkerId(c['name']), position: c['location'], onTap: () => _showClinicDetails(c))).toSet(),
+          myLocationEnabled: true,
+          myLocationButtonEnabled: false,
+          zoomControlsEnabled: false,
         ),
-        Positioned(
-          top: topPadding + 10,
-          left: 20,
-          child: CircleAvatar(
-            backgroundColor: Colors.white,
-            child: IconButton(
-              icon: const Icon(Icons.close, color: Colors.black),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-        ),
+        Positioned(bottom: 20, right: 20, child: FloatingActionButton(onPressed: _moveCameraToCurrentLocation, backgroundColor: const Color(0xFF985BEF), child: const Icon(Icons.my_location))),
       ],
-    );
-  }
-
-  Widget _buildPermissionDeniedView() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.location_off, size: 48, color: Color(0xFF985BEF)),
-            const SizedBox(height: 18),
-            const Text(
-              'Location permission is required to show nearby vets.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Please enable location services and restart the app to view the map.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReviewsSection(List<Map<String, dynamic>> reviews) {
-    if (reviews.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: Text('No reviews yet', style: TextStyle(fontSize: 12, color: Colors.grey)),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Reviews', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        const SizedBox(height: 12),
-        ...reviews.take(3).map((review) => GestureDetector(
-          onTap: () => _showFullReview(review),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[200]!),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              review['name'] as String,
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                            ),
-                            Text(
-                              review['time'] as String,
-                              style: const TextStyle(fontSize: 10, color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Row(
-                        children: List.generate(5, (i) => Icon(
-                          i < (review['rating'] as int) ? Icons.star : Icons.star_border,
-                          color: Colors.amber,
-                          size: 14,
-                        )),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    review['comment'] as String,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        )).toList(),
-      ],
-    );
-  }
-
-  Widget _buildGalleryItem(String url) {
-    return Container(
-      width: 90,
-      height: 90,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 5))],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: url.isNotEmpty
-            ? Image.network(
-                url,
-                width: 90,
-                height: 90,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: Colors.grey[200],
-                  child: const Icon(Icons.image, color: Colors.grey, size: 40),
-                ),
-              )
-            : Container(
-                color: Colors.grey[200],
-                child: const Icon(Icons.image, color: Colors.grey, size: 40),
-              ),
-      ),
-    );
-  }
-
-  void _showFullReview(Map<String, dynamic> review) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.3,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (context, scrollController) {
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: SingleChildScrollView(
-                controller: scrollController,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(review['name'] as String, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: List.generate(5, (i) => Icon(
-                                  i < (review['rating'] as int) ? Icons.star : Icons.star_border,
-                                  color: Colors.amber,
-                                  size: 16,
-                                )),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(review['time'] as String, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(review['comment'] as String, style: const TextStyle(fontSize: 14, color: Colors.black87)),
-                    const SizedBox(height: 20),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildActionCircle(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Icon(icon, color: const Color(0xFF985BEF), size: 30),
-      ),
-    );
-  }
-
-  Widget _buildNavIcon(String url) {
-    return Image.network(url, width: 50, height: 50);
-  }
-}
-
-class _MapStatusBanner extends StatelessWidget {
-  final String message;
-  const _MapStatusBanner({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        message,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-      ),
     );
   }
 }

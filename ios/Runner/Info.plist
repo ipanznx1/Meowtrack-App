@@ -53,6 +53,24 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Meowtrack memerlukan akses kamera untuk mengambil gambar kucing anda.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Meowtrack memerlukan akses galeri untuk memuat naik dokumen dan gambar profil.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Meowtrack memerlukan lokasi anda untuk mencari klinik veterinar terdekat.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Meowtrack memerlukan akses mikrofon untuk ciri suara AI Paws.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Meowtrack memerlukan akses pengecaman pertuturan untuk menukar suara kepada teks dalam AI Paws.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>googlechromes</string>
+		<string>comgooglemaps</string>
+		<string>waze</string>
+		<string>whatsapp</string>
+		<string>tel</string>
+	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

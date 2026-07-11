@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:meow_track/core/widgets/image_background.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -39,27 +40,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: Stack(
         children: [
           // 1. DYNAMIC BACKGROUND LAYER
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            child: _currentPage == 0
-                ? Container(
-                    key: const ValueKey('bg_gradient'),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xFF985BEF), Colors.white],
-                        stops: [0.0, 0.45],
+          Positioned.fill(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              child: _currentPage == 0
+                  ? Container(
+                      key: const ValueKey('bg_gradient'),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0xFF985BEF), Colors.white],
+                          stops: [0.0, 0.45],
+                        ),
                       ),
+                    )
+                  : Image.asset(
+                      _onboardingData[_currentPage]['image']!,
+                      key: ValueKey('bg_image_$_currentPage'),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
                     ),
-                  )
-                : Image.asset(
-                    _onboardingData[_currentPage]['image']!,
-                    key: ValueKey('bg_image_$_currentPage'),
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                  ),
+            ),
           ),
 
           // 2. CONTENT LAYER
@@ -76,18 +79,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     },
                     itemCount: _onboardingData.length,
                     itemBuilder: (context, index) {
-                      // Page 1 has centered image, Page 2 & 3 have full-screen bg
                       return Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Spacer(flex: 2),
-                          if (index == 0) // Only show centered image for first screen
-                            SizedBox(
-                              height: 320,
-                              child: Image.asset(_onboardingData[index]['image']!, fit: BoxFit.contain),
-                            )
-                          else
-                            const SizedBox(height: 320), // Placeholder to keep layout consistent
+                          // Only show centered image for the first page (Unity)
+                          // For page 2 & 3, the image is already the background
+                          index == 0
+                              ? SizedBox(
+                                  height: 350,
+                                  child: Image.asset(
+                                    _onboardingData[index]['image']!,
+                                    fit: BoxFit.contain,
+                                  ),
+                                )
+                              : const SizedBox(height: 350),
                           const Spacer(),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 30),
@@ -97,10 +103,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                   _onboardingData[index]['title']!,
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    fontSize: 24, 
-                                    fontWeight: FontWeight.w900, 
-                                    color: Colors.black,
-                                    shadows: index != 0 ? [const Shadow(color: Colors.white, blurRadius: 10)] : null,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w900,
+                                    color: index == 0 ? Colors.black : Colors.black, // Tetap hitam jika background cerah, atau putih jika gelap
                                   ),
                                 ),
                                 const SizedBox(height: 20),
@@ -108,11 +113,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                   _onboardingData[index]['description']!,
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    fontSize: 14, 
-                                    color: Colors.grey[800], 
-                                    height: 1.5, 
+                                    fontSize: 14,
+                                    color: index == 0 ? Colors.grey[800] : Colors.grey[800],
+                                    height: 1.5,
                                     fontWeight: FontWeight.w600,
-                                    shadows: index != 0 ? [const Shadow(color: Colors.white, blurRadius: 5)] : null,
                                   ),
                                 ),
                               ],
@@ -171,16 +175,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget buildDot({required int index}) {
+    final bool isActive = _currentPage == index;
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.only(right: 8),
-      height: 14,
-      width: 14,
+      duration: const Duration(milliseconds: 300),
+      margin: const EdgeInsets.only(right: 12),
+      height: isActive ? 20 : 12,
+      width: isActive ? 20 : 12,
       decoration: BoxDecoration(
-        color: _currentPage == index ? const Color(0xFF985BEF) : const Color(0xFFD9D9D9),
+        color: isActive ? const Color(0xFF985BEF) : const Color(0xFFD9D9D9),
         shape: BoxShape.circle,
-        border: _currentPage != 0 ? Border.all(color: Colors.white, width: 2) : null,
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 }

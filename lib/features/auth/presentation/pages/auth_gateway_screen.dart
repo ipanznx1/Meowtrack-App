@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:meow_track/core/widgets/image_background.dart';
+import 'package:meow_track/router/app_router.dart';
 
 class AuthGatewayScreen extends StatelessWidget {
   const AuthGatewayScreen({super.key});
@@ -51,7 +53,7 @@ class AuthGatewayScreen extends StatelessWidget {
               const Spacer(),
               // Get Started Button
               ElevatedButton(
-                onPressed: () => context.push('/signup'),
+                onPressed: () => context.push(AppRouter.signup),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF985BEF),
                   minimumSize: const Size(double.infinity, 56),
@@ -72,7 +74,7 @@ class AuthGatewayScreen extends StatelessWidget {
               const SizedBox(height: 16),
               // Sign In Button
               ElevatedButton(
-                onPressed: () => context.push('/login'),
+                onPressed: () => context.push(AppRouter.login),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFEBEBEB),
                   minimumSize: const Size(double.infinity, 56),

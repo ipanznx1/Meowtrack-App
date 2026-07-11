@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:meow_track/core/widgets/image_background.dart';
+import 'package:meow_track/core/widgets/meow_animated_dialog.dart';
 
 class CatOwnerProfileScreen extends StatefulWidget {
   const CatOwnerProfileScreen({super.key});
@@ -67,35 +71,27 @@ class _CatOwnerProfileScreenState extends State<CatOwnerProfileScreen> {
   }
 
   void _onTaskToggled(int index, bool? value) {
+    int oldCompleted = _totalTasksCompleted;
     setState(() {
       _tasks[index]["completed"] = value ?? false;
-      
-      // Trigger Alert if reaching max rank
-      if (_totalTasksCompleted == 5) {
-        _showRoyaltyAlert();
-      }
     });
-  }
 
-  void _showRoyaltyAlert() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-        title: const Text("TAHNIAH! 👑", style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF985BEF))),
-        content: const Text(
-          "Anda telah mencapai pangkat Cat Royalty! 🎉🐾\nKucing anda pasti bangga mempunyai tuan seperti anda.",
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Teruskan!", style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
+    int newCompleted = _totalTasksCompleted;
+    
+    // 🎯 Tunjuk dialog jika capai milestone baru (2, 3, 4, atau 5 tugas)
+    if (newCompleted > oldCompleted && newCompleted >= 2) {
+      final rankInfo = _getRankInfo();
+      MeowAnimatedDialog.show(
+        context,
+        animationPath: rankInfo["image"]!, // Akan guna Image.asset secara automatik
+        title: "Pangkat Baru: ${rankInfo["name"]}",
+        description: newCompleted == 5 
+            ? "Luar biasa! Anda kini adalah 'Cat Royalty'. Kucing anda pasti sangat bangga!" 
+            : "Tahniah! Anda telah naik ke tahap '${rankInfo["name"]}'. Teruskan menjaga si bulu!",
+        themeColor: const Color(0xFF985BEF),
+        buttonText: newCompleted == 5 ? "Kutip Mahkota 👑" : "Teruskan!",
+      );
+    }
   }
 
   @override
@@ -253,6 +249,64 @@ class _CatOwnerProfileScreenState extends State<CatOwnerProfileScreen> {
                   ),
                 );
               },
+            ),
+            const SizedBox(height: 20),
+            
+            // --- HACK TEST BUTTON (TEMPORARY) ---
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 25),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: ListTile(
+                  leading: const Icon(Icons.security, color: Colors.red),
+                  title: const Text("Security Hack Test", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                  subtitle: const Text("Cuba padam data orang lain"),
+                  onTap: () async {
+                    // ARAHAN: Ganti ID di bawah dengan ID dokumen kucing orang lain dari Firestore
+                    String dummyCatId = "XB6ap4OazIPgmx6Q0xUOAYAikAJ3";
+
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.red)),
+                    );
+
+                    try {
+                      await FirebaseFirestore.instance.collection('cats').doc(dummyCatId).delete();
+                      
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("❌ UJIAN GAGAL: Pencuri Berjaya Padam!"),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    } on FirebaseException catch (e) {
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        if (e.code == 'permission-denied') {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("✅ UJIAN BERJAYA: Akses Disekat oleh Rules!"),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Error: ${e.message}")),
+                          );
+                        }
+                      }
+                    }
+                  },
+                ),
+              ),
             ),
             const SizedBox(height: 40),
           ],

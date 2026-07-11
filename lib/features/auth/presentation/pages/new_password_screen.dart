@@ -1,23 +1,63 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:meow_track/features/auth/presentation/widgets/auth_background_wrapper.dart';
+import 'package:meow_track/router/app_router.dart';
 
-class NewPasswordScreen extends StatelessWidget {
+class NewPasswordScreen extends StatefulWidget {
   const NewPasswordScreen({super.key});
+
+  @override
+  State<NewPasswordScreen> createState() => _NewPasswordScreenState();
+}
+
+class _NewPasswordScreenState extends State<NewPasswordScreen> {
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  void _handleCreateNewPassword() {
+    final password = _passwordController.text;
+    final confirm = _confirmPasswordController.text;
+
+    if (password.isEmpty || confirm.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please complete both fields.')),
+      );
+      return;
+    }
+
+    if (password != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match.')),
+      );
+      return;
+    }
+
+    // Logic for updating password would go here
+    print('Password updated successfully');
+    
+    // Success feedback and back to login
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Password updated successfully! Please sign in.')),
+    );
+    context.go(AppRouter.login);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.white, Color(0xFFE8DBFB)],
-          ),
-        ),
+      resizeToAvoidBottomInset: false, // Background stays full even when keyboard is up
+      body: AuthBackgroundWrapper(
         child: SafeArea(
           child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 30.0),
             child: Column(
               children: [
@@ -33,12 +73,13 @@ class NewPasswordScreen extends StatelessWidget {
                 const SizedBox(height: 80),
                 _buildLabel('Enter New Password'),
                 _buildTextField(
+                  controller: _passwordController,
                   hintText: 'Password',
                   icon: 'assets/icons/Password.svg',
                   isPassword: true,
                 ),
                 const SizedBox(height: 5),
-                // Password Strength Indicator
+                // Password Strength Indicator (UI Placeholder)
                 Row(
                   children: [
                     Expanded(
@@ -63,6 +104,7 @@ class NewPasswordScreen extends StatelessWidget {
                 const SizedBox(height: 20),
                 _buildLabel('Confirm Password'),
                 _buildTextField(
+                  controller: _confirmPasswordController,
                   hintText: 'Confirm Password',
                   icon: 'assets/icons/Confirm Password.svg',
                   isPassword: true,
@@ -70,7 +112,7 @@ class NewPasswordScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 60),
                 ElevatedButton(
-                  onPressed: () => context.go('/login'),
+                  onPressed: _handleCreateNewPassword,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF985BEF),
                     minimumSize: const Size(double.infinity, 56),
@@ -90,7 +132,7 @@ class NewPasswordScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: () => context.go('/login'),
+                  onPressed: () => context.go(AppRouter.login),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 56),
@@ -129,13 +171,21 @@ class NewPasswordScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTextField({required String hintText, required Object icon, bool isPassword = false, bool isCheck = false}) {
+  Widget _buildTextField({required TextEditingController controller, required String hintText, required Object icon, bool isPassword = false, bool isCheck = false}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: TextField(
+        controller: controller,
         obscureText: isPassword,
         decoration: InputDecoration(
           hintText: hintText,
@@ -143,7 +193,7 @@ class NewPasswordScreen extends StatelessWidget {
           suffixIcon: (isCheck)
               ? Icon(Icons.check_circle_outline_rounded, color: const Color(0xFF985BEF).withValues(alpha: 0.5))
               : ((icon is String)
-                  ? SvgPicture.asset(icon, color: const Color(0xFF985BEF).withValues(alpha: 0.5), width: 22, height: 22)
+                  ? SvgPicture.asset(icon, colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn), width: 22, height: 22)
                   : Icon(icon as IconData, color: const Color(0xFF985BEF).withValues(alpha: 0.5))),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),

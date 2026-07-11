@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
@@ -14,15 +15,45 @@ class AddNotePage extends StatefulWidget {
 class _AddNotePageState extends State<AddNotePage> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
-  String _selectedIconAsset = 'assets/icons/Anything notes.svg';
+  bool _isLoading = false;
 
-  final List<Map<String, dynamic>> _availableIcons = [
-    {'name': 'Medical', 'icon': 'assets/icons/Health notes.svg'},
-    {'name': 'Food', 'icon': 'assets/icons/Food notes.svg'},
-    {'name': 'Medicine', 'icon': 'assets/icons/Ubat notes.svg'},
-    {'name': 'Warning', 'icon': 'assets/icons/warning notes.svg'},
-    {'name': 'Note', 'icon': 'assets/icons/Anything notes.svg'},
-  ];
+  Future<void> _submitNote() async {
+    if (_titleController.text.isEmpty) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('cats')
+          .doc(widget.cat.id)
+          .collection('health_records')
+          .add({
+        'type': 'note',
+        'title': _titleController.text,
+        'content': _contentController.text,
+        'date': '${DateTime.now().day} ${_getMonthName(DateTime.now().month)} ${DateTime.now().year}',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        context.pop();
+      }
+    } catch (e) {
+      debugPrint("Error adding note: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to add note.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  String _getMonthName(int month) {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return months[month - 1];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +63,7 @@ class _AddNotePageState extends State<AddNotePage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: SvgPicture.asset('assets/icons/Back.svg', color: Colors.black, width: 24, height: 24),
+          icon: SvgPicture.asset('assets/icons/Back.svg', colorFilter: const ColorFilter.mode(Colors.black, BlendMode.srcIn), width: 24, height: 24),
           onPressed: () => context.pop(),
         ),
         title: const Text('Add Notes', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -48,11 +79,6 @@ class _AddNotePageState extends State<AddNotePage> {
             _buildTextField(_titleController, 'Title notes', 'assets/icons/Title notes.svg'),
             
             const SizedBox(height: 25),
-            const Text('Icon', style: TextStyle(fontWeight: FontWeight.w500)),
-            const SizedBox(height: 8),
-            _buildIconDropdown(),
-            
-            const SizedBox(height: 25),
             const Text('Notes', style: TextStyle(fontWeight: FontWeight.w500)),
             const SizedBox(height: 8),
             Container(
@@ -62,34 +88,23 @@ class _AddNotePageState extends State<AddNotePage> {
               child: TextField(
                 controller: _contentController,
                 maxLines: 10,
-                decoration: const InputDecoration(hintText: 'Title notes', border: InputBorder.none),
+                decoration: const InputDecoration(hintText: 'Content...', border: InputBorder.none),
               ),
             ),
             
             const SizedBox(height: 50),
             Center(
               child: ElevatedButton(
-                onPressed: () {
-                  if (_titleController.text.isNotEmpty) {
-                    appState.addNote(
-                      widget.cat.name,
-                      CatNote(
-                        title: _titleController.text,
-                        content: _contentController.text,
-                        date: 'Today',
-                        icon: Icons.note, // Temporary until CatNote supports SVG asset paths
-                      ),
-                    );
-                    context.pop();
-                  }
-                },
+                onPressed: _isLoading ? null : _submitNote,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[300],
+                  backgroundColor: Colors.white,
                   minimumSize: const Size(200, 50),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   elevation: 0,
                 ),
-                child: const Text('Submit', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
+                child: _isLoading 
+                  ? const CircularProgressIndicator(color: Color(0xFF985BEF))
+                  : const Text('Submit', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
               ),
             ),
           ],
@@ -107,36 +122,10 @@ class _AddNotePageState extends State<AddNotePage> {
           hintText: hint,
           suffixIcon: Padding(
             padding: const EdgeInsets.all(12.0),
-            child: SvgPicture.asset(svgAsset, color: const Color(0xFF985BEF).withValues(alpha: 0.5), width: 20, height: 20),
+            child: SvgPicture.asset(svgAsset, colorFilter: ColorFilter.mode(const Color(0xFF985BEF).withValues(alpha: 0.5), BlendMode.srcIn), width: 20, height: 20),
           ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildIconDropdown() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedIconAsset,
-          isExpanded: true,
-          items: _availableIcons.map((item) {
-            return DropdownMenuItem<String>(
-              value: item['icon'],
-              child: Row(
-                children: [
-                  SvgPicture.asset(item['icon'], color: const Color(0xFF985BEF), width: 24, height: 24),
-                  const SizedBox(width: 15),
-                  Text(item['name']),
-                ],
-              ),
-            );
-          }).toList(),
-          onChanged: (v) => setState(() => _selectedIconAsset = v!),
         ),
       ),
     );

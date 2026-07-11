@@ -1,22 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
-
-class Purrmate {
-  final String name;
-  final String username;
-  final String purrCode;
-  final bool isCoOwner;
-  final String bio;
-
-  Purrmate({
-    required this.name,
-    required this.username,
-    required this.purrCode,
-    this.isCoOwner = false,
-    this.bio = "",
-  });
-}
+import 'package:meow_track/core/app_state.dart';
+import 'package:meow_track/core/widgets/meow_animated_dialog.dart';
 
 class PurrmatesPage extends StatefulWidget {
   const PurrmatesPage({super.key});
@@ -26,14 +13,10 @@ class PurrmatesPage extends StatefulWidget {
 }
 
 class _PurrmatesPageState extends State<PurrmatesPage> {
-  final List<Purrmate> _allPurrmates = [
-    Purrmate(name: "Sarah Amelia", username: "@sarah_cats", purrCode: "19080287", isCoOwner: true),
-    Purrmate(name: "Ahmad Syafiq", username: "@ahmad_syafiq1", purrCode: "29080287"),
-    Purrmate(name: "Nadia Rosli", username: "@nad_fluffy", purrCode: "29046587"),
-    Purrmate(name: "Faiz Subri", username: "@faiz_99", purrCode: "45380287"),
-  ];
+  final TextEditingController _searchController = TextEditingController();
 
   void _showAddPurrmateDialog() {
+    final codeController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -42,26 +25,46 @@ class _PurrmatesPageState extends State<PurrmatesPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Enter your friend's unique Username or Care Code to send a connection request.", 
+            const Text("Enter your friend's unique Purr Code to send a connection request.", 
               textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 20),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 15),
               decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(15)),
               child: TextField(
-                decoration: InputDecoration(
-                  hintText: "Enter Username / Code...",
+                controller: codeController,
+                keyboardType: TextInputType.text, // Ditukar dari number ke text
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  hintText: "Enter 8-digit Code...",
                   border: InputBorder.none,
-                  suffixIcon: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: SvgPicture.asset('assets/icons/Search....svg', colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn), width: 20, height: 20),
-                  ),
                 ),
               ),
             ),
             const SizedBox(height: 25),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () async {
+                final code = codeController.text.trim().toUpperCase();
+                if (code.isEmpty) return;
+                
+                try {
+                  await appState.sendFriendRequest(code);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    MeowAnimatedDialog.show(
+                      context,
+                      animationPath: 'assets/animations/purrmates.json',
+                      title: "Permintaan Dihantar!",
+                      description: "Permintaan Purrmate anda telah dihantar kepada rakan anda.",
+                      themeColor: Colors.pinkAccent,
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString().split(']').last}")));
+                  }
+                }
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF985BEF),
                 minimumSize: const Size(double.infinity, 50),
@@ -75,131 +78,174 @@ class _PurrmatesPageState extends State<PurrmatesPage> {
     );
   }
 
+  void _copyMyCode() {
+    if (appState.purrCode != null) {
+      Clipboard.setData(ClipboardData(text: appState.purrCode!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("My Purr Code ${appState.purrCode} copied to clipboard!")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final coOwners = _allPurrmates.where((p) => p.isCoOwner).toList();
-    final friends = _allPurrmates.where((p) => !p.isCoOwner).toList();
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFEFEFEF),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: SvgPicture.asset('assets/icons/Back.svg', width: 24, height: 24, colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn)),
-          onPressed: () => context.pop(),
-        ),
-        title: const Text("My Purr-mates", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
-                    child: TextField(
-                    decoration: InputDecoration(
-                      hintText: "Search my Purr-mates...",
-                      border: InputBorder.none,
-                      suffixIcon: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: SvgPicture.asset('assets/icons/Search....svg', colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn), width: 20, height: 20),
+    return ListenableBuilder(
+      listenable: appState,
+      builder: (context, _) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFEFEFEF),
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: SvgPicture.asset('assets/icons/Back.svg', width: 24, height: 24, colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn)),
+              onPressed: () => context.pop(),
+            ),
+            title: const Text("My Purr-mates", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            centerTitle: true,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.share, color: Color(0xFF985BEF)),
+                onPressed: _copyMyCode,
+              )
+            ],
+          ),
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 15),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: "Search my Purr-mates...",
+                            border: InputBorder.none,
+                            suffixIcon: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: SvgPicture.asset('assets/icons/Search....svg', colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn), width: 20, height: 20),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    IconButton(
+                      icon: SvgPicture.asset('assets/icons/Upload Photo Gallery, zoom, add.svg', width: 35, height: 35, colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn)),
+                      onPressed: _showAddPurrmateDialog,
+                    ),
+                  ],
+                ),
+              ),
+
+              if (appState.pendingRequests.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: Align(alignment: Alignment.centerLeft, child: Text("Pending Requests", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange))),
+                ),
+                SizedBox(
+                  height: 100,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: appState.pendingRequests.length,
+                    itemBuilder: (context, index) {
+                      final req = appState.pendingRequests[index];
+                      return _buildRequestAvatar(req);
+                    },
                   ),
                 ),
-                const SizedBox(width: 10),
-                IconButton(
-                  icon: SvgPicture.asset('assets/icons/Upload Photo Gallery, zoom, add.svg', width: 35, height: 35, colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn)),
-                  onPressed: _showAddPurrmateDialog,
+                const Divider(),
+              ],
+
+              Expanded(
+                child: appState.friends.isEmpty 
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text("No purr-mates yet."),
+                          Text("Your Purr Code: ${appState.purrCode ?? '...'}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(20),
+                      itemCount: appState.friends.length,
+                      itemBuilder: (context, index) {
+                        return _buildContactCard(appState.friends[index]);
+                      },
+                    ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRequestAvatar(FriendRequest req) {
+    return Container(
+      margin: const EdgeInsets.only(right: 15),
+      child: Column(
+        children: [
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 25,
+                backgroundImage: req.fromAvatar.isNotEmpty ? NetworkImage(req.fromAvatar) : null,
+                child: req.fromAvatar.isEmpty ? const Icon(Icons.person) : null,
+              ),
+              Positioned(
+                bottom: -5,
+                right: -5,
+                child: GestureDetector(
+                  onTap: () => appState.acceptFriendRequest(req),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                    child: const Icon(Icons.check, size: 12, color: Colors.white),
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                _filterChip("All Friends (12)", true),
-                _filterChip("Paws Pending (2)", false),
-                _filterChip("Co-Owners", false),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                const Text("Co-Owners (1)", style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                ...coOwners.map((p) => _buildContactCard(p)),
-                const SizedBox(height: 25),
-                const Text("All Friends (12)", style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                ...friends.map((p) => _buildContactCard(p)),
-              ],
-            ),
-          ),
+          const SizedBox(height: 4),
+          Text(req.fromName, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
         ],
       ),
     );
   }
 
-  Widget _filterChip(String label, bool isSelected) {
-    return Container(
-      margin: const EdgeInsets.only(right: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.grey[300] : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.black12),
-      ),
-      child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-    );
-  }
-
   Widget _buildContactCard(Purrmate p) {
-    return GestureDetector(
-      onTap: () => context.push('/purrmate-profile', extra: p),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-        child: Row(
-          children: [
-            if (p.name == "Sarah Amelia")
-              const CircleAvatar(radius: 25, backgroundImage: AssetImage('assets/images/Sarah amelia.png'))
-            else
-              CircleAvatar(
-                radius: 25, 
-                backgroundColor: const Color(0xFFF5F5F5), 
-                child: SvgPicture.asset('assets/icons/Cat’s Profile.svg', width: 25, height: 25, colorFilter: const ColorFilter.mode(Colors.orange, BlendMode.srcIn))
-              ),
-            const SizedBox(width: 15),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("${p.name} (${p.username})", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  Text(p.isCoOwner ? "Co-Parent for 'Luna'" : "Owner of Oyen & Tom", style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                  Text("Purr code : ${p.purrCode}", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                ],
-              ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 25, 
+            backgroundImage: p.avatarUrl.isNotEmpty ? NetworkImage(p.avatarUrl) : null,
+            child: p.avatarUrl.isEmpty ? SvgPicture.asset('assets/icons/Cat’s Profile.svg', width: 25, height: 25, colorFilter: const ColorFilter.mode(Colors.orange, BlendMode.srcIn)) : null,
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("${p.name} (${p.username})", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Text(p.isCoOwner ? "Co-Parent" : "Purrmate", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                Text("Purr code : ${p.purrCode}", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+              ],
             ),
-            Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-              child: SvgPicture.asset('assets/icons/Back.svg', width: 16, height: 16, colorFilter: const ColorFilter.mode(Colors.grey, BlendMode.srcIn)),
-            ),
-          ],
-        ),
+          ),
+          const Icon(Icons.chevron_right, color: Colors.grey),
+        ],
       ),
     );
   }
