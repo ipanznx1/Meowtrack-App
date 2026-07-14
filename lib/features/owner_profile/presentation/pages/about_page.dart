@@ -71,8 +71,8 @@ class AboutPage extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  const Text("App Version 1.0.0", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const Text("Last update : 21 January 2026", style: TextStyle(color: Colors.grey, fontSize: 10)),
+                  const Text("App Version 1.1.0", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const Text("Last update : Today", style: TextStyle(color: Colors.grey, fontSize: 10)),
                   const SizedBox(height: 15),
                   ElevatedButton(
                     onPressed: () {
@@ -101,12 +101,13 @@ class AboutPage extends StatelessWidget {
                   const SizedBox(height: 20),
                   const Align(
                     alignment: Alignment.centerLeft,
-                    child: Text("What's New (14 May 2026)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    child: Text("What's New", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   ),
                   const SizedBox(height: 10),
-                  _buildBulletPoint("Enhanced Bluetooth Sync: Faster and more stable connection with Mi Tag devices."),
-                  _buildBulletPoint("Precision GPS: Improved location accuracy for outdoor tracking."),
-                  _buildBulletPoint("Battery Saver Mode: New algorithm to make your cat's collar last longer."),
+                  _buildBulletPoint("Custom Cat Themes: Choose from 8 pastel colors for cat profiles."),
+                  _buildBulletPoint("Edit Cat Profile: New screen to modify cat details anytime."),
+                  _buildBulletPoint("UI Improvements: Fixed profile page overflows and added sticker effects."),
+                  _buildBulletPoint("Enhanced Stability: Better handling of environment variables and API keys."),
                 ],
               ),
             ),
