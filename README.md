@@ -31,4 +31,4 @@ Jika anda ingin mencuba aplikasi Meowtrack, sila ikut langkah di bawah:
 Kod ini telah melalui proses **Obfuscation (R8)**. Fail konfigurasi sensitif (`google-services.json`) tidak disertakan dalam repository ini untuk melindungi integriti pangkalan data Firebase kami.
 
 ## 📄 Lesen
-Hak Cipta Terpelihara © 2024.
+Hak Cipta Terpelihara © 2026.
