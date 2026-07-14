@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:meow_track/core/app_state.dart';
+import 'package:meow_track/core/widgets/cat_sticker.dart';
 import 'package:meow_track/core/tutorial_controller.dart';
 import 'package:meow_track/router/app_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -188,54 +189,61 @@ class _DashboardPageState extends State<DashboardPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 100),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. MEOWTRACK HEADER
-              Padding(
-                padding: const EdgeInsets.only(top: 25, bottom: 15),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: ListenableBuilder(
+          listenable: appState,
+          builder: (context, _) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 100),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 🚨 EMERGENCY ALERT BAR
+                  if (appState.currentState == AppEventState.myCatLost)
+                    _buildEmergencyBar(context),
+
+                  // 1. MEOWTRACK HEADER
+                  Padding(
+                    padding: const EdgeInsets.only(top: 25, bottom: 15),
+                    child: Center(
+                      child: Column(
                         children: [
-                          const SizedBox(width: 48), // Spacer balance
-                          const Text(
-                            "MEOWTRACK",
-                            style: TextStyle(
-                              fontFamily: 'Yorkmade',
-                              fontSize: 42,
-                              fontWeight: FontWeight.normal,
-                              color: Color(0xFF985BEF),
-                              letterSpacing: 1.0,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const SizedBox(width: 48), // Spacer balance
+                              const Text(
+                                "MEOWTRACK",
+                                style: TextStyle(
+                                  fontFamily: 'Yorkmade',
+                                  fontSize: 42,
+                                  fontWeight: FontWeight.normal,
+                                  color: Color(0xFF985BEF),
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                              const SizedBox(width: 48), // Spacer balance
+                            ],
                           ),
-                          const SizedBox(width: 48), // Spacer balance
+                          const SizedBox(height: 4),
+                          ListenableBuilder(
+                            listenable: appState,
+                            builder: (context, _) {
+                              final String name = appState.userName ?? "User";
+                              final bool isNew = appState.isNewUser;
+                              return Text(
+                                isNew ? "Welcome to the Family, $name!" : "Welcome back, $name!",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey[600],
+                                ),
+                              );
+                            },
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      ListenableBuilder(
-                        listenable: appState,
-                        builder: (context, _) {
-                          final String name = appState.userName ?? "User";
-                          final bool isNew = appState.isNewUser;
-                          return Text(
-                            isNew ? "Welcome to the Family, $name!" : "Welcome back, $name!",
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.grey[600],
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
 
               // 2. COMMUNITY BANNER
               Padding(
@@ -364,7 +372,34 @@ class _DashboardPageState extends State<DashboardPage> {
               _buildInsurancePromoBanner(context),
             ],
           ),
-        ),
+        );
+      },
+    ),
+  ),
+);
+}
+
+  Widget _buildEmergencyBar(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: Colors.red,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 28),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              "MOD KECEMASAN: Hebahan Kucing Hilang Sedang Aktif",
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+          TextButton(
+            onPressed: () => context.push(AppRouter.communityHub),
+            style: TextButton.styleFrom(backgroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12)),
+            child: const Text("Lihat Laporan", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 11)),
+          ),
+        ],
       ),
     );
   }
@@ -384,7 +419,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.grid_view_rounded, color: Color(0xFF985BEF), size: 26),
+                const Icon(Icons.grid_view_outlined, color: Color(0xFF985BEF), size: 26),
                 const SizedBox(width: 10),
                 const Text(
                   "MEOW TOOLS", 
@@ -404,7 +439,7 @@ class _DashboardPageState extends State<DashboardPage> {
               _toolCard(
                 context, 
                 "Kibble Tracker", 
-                Icons.restaurant, 
+                Icons.restaurant_outlined, 
                 const Color(0xFFFFE0B2), 
                 const Color(0xFFE65100),
                 () => context.push('/kibble-tracker')
@@ -412,7 +447,7 @@ class _DashboardPageState extends State<DashboardPage> {
               _toolCard(
                 context, 
                 "MeowBudget", 
-                Icons.account_balance_wallet, 
+                Icons.account_balance_wallet_outlined,
                 const Color(0xFFC8E6C9), 
                 const Color(0xFF1B5E20),
                 () => context.push('/budget-tracker')
@@ -667,11 +702,13 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(color: cat.themeColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(30))),
-                child: Center(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
                   child: Transform.scale(
                     scale: cat.imageScale,
+                    alignment: Alignment.bottomCenter,
                     child: Padding(
-                      padding: const EdgeInsets.all(12), // Ruang tambahan untuk outline
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: CatSticker(
                         image: _buildCatImage(cat.image),
                       ),
@@ -801,46 +838,6 @@ class _DashboardPageState extends State<DashboardPage> {
     final minute = dateTime.minute.toString().padLeft(2, '0');
     final suffix = dateTime.hour >= 12 ? 'PM' : 'AM';
     return '${dateTime.day} ${monthNames[dateTime.month - 1]} ${dateTime.year} at $hour:$minute $suffix';
-  }
-}
-
-/// Widget untuk menghasilkan kesan "Sticker Outline" pada gambar kucing.
-class CatSticker extends StatelessWidget {
-  final Widget image;
-  final double outlineThickness;
-  final Color outlineColor;
-
-  const CatSticker({
-    super.key,
-    required this.image,
-    this.outlineThickness = 2.5, // Ketebalan garisan putih
-    this.outlineColor = Colors.white,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // 1. LAPISAN OUTLINE (DI BELAKANG)
-        // Kita hasilkan 8 salinan gambar kucing yang dicat putih sepenuhnya.
-        // Setiap salinan dialihkan (offset) ke arah yang berbeza (Atas, Bawah, Kiri, Kanan, & Penjuru).
-        for (double i = 0; i < 360; i += 45)
-          Transform.translate(
-            offset: Offset.fromDirection(i * 0.0174533, outlineThickness),
-            child: ColorFiltered(
-              // BlendMode.srcIn menukarkan semua pixel yang tidak lutsinar (kucing) 
-              // kepada warna outlineColor (putih), manakala bahagian lutsinar kekal kosong.
-              colorFilter: ColorFilter.mode(outlineColor, BlendMode.srcIn),
-              child: image,
-            ),
-          ),
-
-        // 2. GAMBAR ASAL (DI HADAPAN)
-        // Gambar kucing asal diletakkan di atas lapisan putih tadi.
-        image,
-      ],
-    );
   }
 }
 

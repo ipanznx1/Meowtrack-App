@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:meow_track/core/app_state.dart';
 import 'package:meow_track/core/widgets/image_background.dart';
+import 'package:meow_track/core/widgets/cat_sticker.dart';
 
 class CatProfilePage extends StatelessWidget {
   final Cat cat;
@@ -33,7 +34,7 @@ class CatProfilePage extends StatelessWidget {
               child: Column(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -41,8 +42,18 @@ class CatProfilePage extends StatelessWidget {
                           icon: SvgPicture.asset('assets/icons/Back.svg', width: 40, height: 40, colorFilter: const ColorFilter.mode(Colors.black, BlendMode.srcIn)),
                           onPressed: () => context.pop(),
                         ),
-                        Text(currentCat.name, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 36)),
-                        const SizedBox(width: 50),
+                        Expanded(
+                          child: Text(
+                            currentCat.name, 
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 28)
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit_note_rounded, size: 35, color: Colors.black),
+                          onPressed: () => context.push('/edit-cat/${currentCat.id}', extra: currentCat),
+                        ),
                       ],
                     ),
                   ),
@@ -64,18 +75,42 @@ class CatProfilePage extends StatelessWidget {
                           scale: currentCat.imageScale,
                           child: Padding(
                             padding: const EdgeInsets.all(20),
-                            child: _buildCatImage(currentCat.image),
+                            child: CatSticker(
+                              image: _buildCatImage(currentCat.image),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                   
-                  const SizedBox(height: 30),
-                  
-                  _textInfo('Breed', currentCat.breed.toUpperCase()),
                   const SizedBox(height: 20),
-                  _textInfo('Gender', currentCat.gender),
+
+                  // QUICK STATS BAR
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        _quickStat(Icons.battery_full_rounded, '${currentCat.battery.toStringAsFixed(0)}%', Colors.green),
+                        _quickStat(Icons.favorite_rounded, '${currentCat.heartRate > 0 ? currentCat.heartRate : '--'} bpm', Colors.red),
+                        _quickStat(Icons.location_on_rounded, currentCat.distance, Colors.blue),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 25),
+                  
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 25),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _textInfo('Breed', currentCat.breed.toUpperCase()),
+                        const SizedBox(width: 20),
+                        _textInfo('Gender', currentCat.gender),
+                      ],
+                    ),
+                  ),
                   
                   const SizedBox(height: 35),
                   
@@ -127,10 +162,35 @@ class CatProfilePage extends StatelessWidget {
     return Image.asset(imagePath, fit: BoxFit.contain, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 50, color: Colors.grey));
   }
 
-  Widget _textInfo(String l, String v) => Column(children: [
-    Text(l, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-    Text(v, style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
-  ]);
+  Widget _textInfo(String l, String v) => Expanded(
+    child: Column(children: [
+      Text(l, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.grey)),
+      Text(v, 
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w900)
+      ),
+    ]),
+  );
+
+  Widget _quickStat(IconData icon, String value, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 4),
+          Text(
+            value, 
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildStyledMenu(BuildContext context, String title, String asset, VoidCallback onTap, double height, Cat c, {bool isSvg = false}) {
     return GestureDetector(

@@ -61,7 +61,16 @@ class OwnerProfilePage extends StatelessWidget {
               const SizedBox(height: 20),
               Text(state.userName ?? 'User', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.black)),
               const SizedBox(height: 5),
-              const Text('Cat Owner', style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('Cat Owner', style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
+                  if (state.isEmailVerified) ...[
+                    const SizedBox(width: 6),
+                    const Icon(Icons.verified, color: Colors.blue, size: 16),
+                  ],
+                ],
+              ),
               const SizedBox(height: 15),
 
               // 🎯 PROMINENT PURR CODE DISPLAY
@@ -127,58 +136,67 @@ class OwnerProfilePage extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 25),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 20),
+                  padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 15),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(35),
                     boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
                   ),
-                  child: Row(
+                  child: Column(
                     children: [
-                      Expanded(
-                        flex: 1,
-                        child: Column(
-                          children: [
-                            const Text('Total Pets', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 12),
-                            Text('$totalPets', style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900)),
-                          ],
-                        ),
+                      Row(
+                        children: [
+                          _statItem('Total Pets', '$totalPets'),
+                          _vDivider(),
+                          _statItem('Paw Streak', '${state.pawStreak}'),
+                          _vDivider(),
+                          _statItem('Days', '${state.trackingDays}'),
+                        ],
                       ),
-                      Container(height: 80, width: 1, color: Colors.grey[200]),
-                      Expanded(
-                        flex: 1,
+                      const SizedBox(height: 20),
+                      const Divider(height: 1),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                getRankBadge(state.currentRank, size: 50),
+                                const SizedBox(width: 15),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Current Rank', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                    Text(state.currentRank, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: Column(
                           children: [
-                            const Text('Rank', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 10),
-                            getRankBadge(state.currentRank, size: 65),
-                            const SizedBox(height: 8),
-                            Text(state.currentRank, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
-                            const SizedBox(height: 12),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              child: Column(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: const LinearProgressIndicator(
-                                      value: 0.4, // Simplified for now
-                                      backgroundColor: Color(0xFFF2F2F7),
-                                      color: Color(0xFF985BEF),
-                                      minHeight: 8,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  const Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text('Progress', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)),
-                                      Text('Next Rank', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)),
-                                    ],
-                                  ),
-                                ],
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: const LinearProgressIndicator(
+                                value: 0.6, // Simplified for now
+                                backgroundColor: Color(0xFFF2F2F7),
+                                color: Color(0xFF985BEF),
+                                minHeight: 8,
                               ),
+                            ),
+                            const SizedBox(height: 6),
+                            const Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Progress to next rank', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                Text('60%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF985BEF))),
+                              ],
                             ),
                           ],
                         ),
@@ -194,6 +212,18 @@ class OwnerProfilePage extends StatelessWidget {
               _buildListItem(context, 'My Household', () => context.push('/household')),
               const SizedBox(height: 12),
               _buildListItem(context, 'Account Settings', () => context.push('/account-settings')),
+
+              if (state.sessionRole == 'admin') ...[
+                const SizedBox(height: 12),
+                _buildListItem(
+                  context, 
+                  'Admin Dashboard', 
+                  () => context.push('/admin-dashboard'),
+                  icon: Icons.admin_panel_settings,
+                  color: const Color(0xFF985BEF).withOpacity(0.1),
+                  textColor: const Color(0xFF985BEF),
+                ),
+              ],
 
               const SizedBox(height: 40),
               const Text('Others', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
@@ -244,19 +274,44 @@ class OwnerProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildListItem(BuildContext context, String title, VoidCallback onTap) {
+  Widget _statItem(String label, String value) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+        ],
+      ),
+    );
+  }
+
+  Widget _vDivider() => Container(height: 30, width: 1, color: Colors.grey[200]);
+
+  Widget _buildListItem(BuildContext context, String title, VoidCallback onTap, {IconData? icon, Color? color, Color? textColor}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: GestureDetector(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 22),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22)),
+          decoration: BoxDecoration(
+            color: color ?? Colors.white, 
+            borderRadius: BorderRadius.circular(22),
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-              const Icon(Icons.chevron_right, color: Colors.grey, size: 28),
+              Row(
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, color: textColor, size: 24),
+                    const SizedBox(width: 15),
+                  ],
+                  Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: textColor)),
+                ],
+              ),
+              Icon(Icons.chevron_right, color: textColor ?? Colors.grey, size: 28),
             ],
           ),
         ),

@@ -20,7 +20,13 @@ class _KibbleTrackerScreenState extends State<KibbleTrackerScreen> {
   double _kcalPer100g = 350.0; // Default: 3.5 kcal/g
 
   // Ambil nilai dari .env secara selamat
-  final String _geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? "";
+  String get _geminiApiKey {
+    try {
+      return dotenv.env['GEMINI_API_KEY'] ?? "";
+    } catch (_) {
+      return "";
+    }
+  }
 
   @override
   void initState() {

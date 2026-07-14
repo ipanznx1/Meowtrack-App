@@ -101,6 +101,7 @@ class CommunityPost {
   final String ownerId;
   final bool isVerified;
   final String? imageUrl;
+  final String? reward;
 
   CommunityPost({
     required this.id,
@@ -117,6 +118,7 @@ class CommunityPost {
     this.ownerId = '',
     this.isVerified = false,
     this.imageUrl,
+    this.reward,
   });
 }
 
@@ -276,6 +278,7 @@ class AppStateController extends ChangeNotifier {
   String _currentRank = "Novice Pawrent";
   String get currentRank => _currentRank;
   int _trackingDays = 0;
+  int get trackingDays => _trackingDays;
 
   // 🎯 DAILY CARE & STREAK SYSTEM
   int pawStreak = 0;

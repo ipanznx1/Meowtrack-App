@@ -22,6 +22,8 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
 
   bool _isMapView = true;
   bool _onlyOpenNow = false;
+  bool _only24h = false;
+  bool _catFriendly = false;
   GoogleMapController? _mapController;
   Position? _currentPosition;
   bool _mapReady = false;
@@ -60,14 +62,31 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
     setState(() {
       _filteredClinics = _clinics.where((clinic) {
         final name = (clinic['name'] ?? '').toString().toLowerCase();
+        final vicinity = (clinic['vicinity'] ?? '').toString().toLowerCase();
+        
         final matchesSearch = name.contains(query);
         final isOpen = clinic['isOpen'] == true;
         
-        if (_onlyOpenNow) {
-          return matchesSearch && isOpen;
-        }
-        return matchesSearch;
+        // Mock identification for demo/keyword based
+        final is24h = name.contains('24') || name.contains('emergency') || vicinity.contains('24');
+        final isCatFriendly = name.contains('cat') || name.contains('feline') || clinic['isCatFriendly'] == true;
+
+        bool matches = matchesSearch;
+        if (_onlyOpenNow && !isOpen) matches = false;
+        if (_only24h && !is24h) matches = false;
+        if (_catFriendly && !isCatFriendly) matches = false;
+        
+        return matches;
       }).toList();
+
+      if (_only24h) {
+        // Sort by distance if SOS mode
+        _filteredClinics.sort((a, b) {
+          double distA = double.tryParse(a['distance'].split(' ').first) ?? 999;
+          double distB = double.tryParse(b['distance'].split(' ').first) ?? 999;
+          return distA.compareTo(distB);
+        });
+      }
     });
   }
 
@@ -179,9 +198,10 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
         final photoRefs = (place['photos'] as List<dynamic>?)?.map((i) => i['photo_reference'] as String?).whereType<String>().toList() ?? [];
         final image = photoRefs.isNotEmpty ? _getPlacePhotoUrl(photoRefs.first) : '';
         final gallery = photoRefs.skip(1).take(3).map(_getPlacePhotoUrl).toList();
+        final name = place['name'] as String? ?? 'Vet Clinic';
 
         return {
-          'name': place['name'] as String? ?? 'Vet Clinic',
+          'name': name,
           'rating': (place['rating'] is num) ? (place['rating'] as num).toDouble() : 4.5,
           'isOpen': (place['opening_hours']?['open_now'] as bool?) ?? false,
           'location': LatLng((location['lat'] as num?)?.toDouble() ?? 0.0, (location['lng'] as num?)?.toDouble() ?? 0.0),
@@ -189,6 +209,8 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
           'gallery': gallery,
           'placeId': place['place_id'] as String? ?? '',
           'vicinity': place['vicinity'] as String? ?? 'No address provided',
+          // Mock data for cat-friendly based on name or random for demo
+          'isCatFriendly': name.toLowerCase().contains('cat') || name.toLowerCase().contains('feline') || (name.hashCode % 5 == 0),
         };
       }).toList();
 
@@ -343,7 +365,45 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
           Expanded(child: _isMapView ? _buildMapView() : _buildListView()),
         ],
       ),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            onPressed: _triggerSOS,
+            backgroundColor: _only24h ? Colors.black : Colors.red,
+            icon: Icon(Icons.emergency, color: Colors.white),
+            label: Text(_only24h ? 'Show All' : 'SOS 24H', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            onPressed: _moveCameraToCurrentLocation, 
+            backgroundColor: const Color(0xFF985BEF), 
+            child: const Icon(Icons.my_location, color: Colors.white)
+          ),
+        ],
+      ),
     );
+  }
+
+  void _triggerSOS() async {
+    setState(() {
+      _only24h = !_only24h;
+      if (_only24h) {
+        _isMapView = false; // Switch to list view to see the nearest clearly
+        _onlyOpenNow = true;
+      }
+    });
+    
+    _applyFilters();
+
+    // If no 24h clinics found in current list, try fetching with keyword
+    bool has24h = _filteredClinics.any((c) => c['name'].toLowerCase().contains('24') || c['name'].toLowerCase().contains('emergency'));
+    
+    if (_only24h && !has24h) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Searching for 24-hour emergency clinics...")));
+      await _fetchNearbyVets(radius: maxRadius); // Try wider radius
+      _applyFilters();
+    }
   }
 
   Widget _buildHeader() {
@@ -387,21 +447,35 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF985BEF), 
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)), 
-                  minimumSize: const Size(140, 48)
+                  minimumSize: const Size(120, 48)
                 ),
                 child: Text(_isMapView ? 'List view' : 'Map view', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
-              if (_onlyOpenNow) ...[
-                const SizedBox(width: 10),
-                Chip(
-                  label: const Text("Open Now", style: TextStyle(color: Colors.white, fontSize: 10)),
-                  backgroundColor: const Color(0xFF985BEF),
-                  deleteIcon: const Icon(Icons.close, size: 12, color: Colors.white),
-                  onDeleted: () {
-                    setState(() => _onlyOpenNow = false);
+              const SizedBox(width: 8),
+              FilterChip(
+                label: const Text("Cat-Friendly", style: TextStyle(fontSize: 12)),
+                selected: _catFriendly,
+                onSelected: (val) {
+                  setState(() => _catFriendly = val);
+                  _applyFilters();
+                },
+                selectedColor: const Color(0xFF985BEF).withOpacity(0.2),
+                checkmarkColor: const Color(0xFF985BEF),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              ),
+              if (_onlyOpenNow || _only24h) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: Color(0xFF985BEF)),
+                  onPressed: () {
+                    setState(() {
+                      _onlyOpenNow = false;
+                      _only24h = false;
+                      _catFriendly = false;
+                    });
                     _applyFilters();
                   },
-                ),
+                )
               ]
             ],
           ),
@@ -417,6 +491,9 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
       itemBuilder: (context, index) {
         if (index == _filteredClinics.length) return Center(child: TextButton(onPressed: _isMoreLoading ? null : _loadMoreVets, child: const Text('Load More')));
         final clinic = _filteredClinics[index];
+        final is24h = (clinic['name'] ?? '').toString().contains('24') || (clinic['name'] ?? '').toString().toLowerCase().contains('emergency') || clinic['vicinity'].toString().contains('24');
+        final isCatFriendly = clinic['isCatFriendly'] == true;
+
         return Card(
           margin: const EdgeInsets.only(bottom: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -428,8 +505,26 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
                 ? Image.network(clinic['image'], width: 60, height: 60, fit: BoxFit.cover)
                 : Container(width: 60, height: 60, color: Colors.grey[200], child: const Icon(Icons.local_hospital)),
             ),
-            title: Text(clinic['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            subtitle: Text('${clinic['rating']} ⭐ • ${clinic['distance']}'),
+            title: Row(
+              children: [
+                Expanded(child: Text(clinic['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                if (is24h) Container(margin: const EdgeInsets.only(left: 4), padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text('24H', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold))),
+              ],
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${clinic['rating']} ⭐ • ${clinic['distance']}'),
+                if (isCatFriendly) 
+                  Row(
+                    children: [
+                      const Icon(Icons.pets, size: 10, color: Color(0xFF985BEF)),
+                      const SizedBox(width: 4),
+                      const Text('Cat-Friendly', style: TextStyle(color: Color(0xFF985BEF), fontSize: 10, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+              ],
+            ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -447,18 +542,13 @@ class _VetDirectoryPageState extends State<VetDirectoryPage> {
   }
 
   Widget _buildMapView() {
-    return Stack(
-      children: [
-        GoogleMap(
-          initialCameraPosition: CameraPosition(target: _currentPosition != null ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude) : const LatLng(3.1319, 101.6840), zoom: 13),
-          onMapCreated: (c) => _mapController = c,
-          markers: _filteredClinics.map((c) => Marker(markerId: MarkerId(c['name']), position: c['location'], onTap: () => _showClinicDetails(c))).toSet(),
-          myLocationEnabled: true,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-        ),
-        Positioned(bottom: 20, right: 20, child: FloatingActionButton(onPressed: _moveCameraToCurrentLocation, backgroundColor: const Color(0xFF985BEF), child: const Icon(Icons.my_location))),
-      ],
+    return GoogleMap(
+      initialCameraPosition: CameraPosition(target: _currentPosition != null ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude) : const LatLng(3.1319, 101.6840), zoom: 13),
+      onMapCreated: (c) => _mapController = c,
+      markers: _filteredClinics.map((c) => Marker(markerId: MarkerId(c['name']), position: c['location'], onTap: () => _showClinicDetails(c))).toSet(),
+      myLocationEnabled: true,
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled: false,
     );
   }
 }

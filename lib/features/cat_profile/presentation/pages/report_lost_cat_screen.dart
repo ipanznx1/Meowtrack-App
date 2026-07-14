@@ -5,6 +5,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:meow_track/core/app_state.dart';
 import 'package:meow_track/core/permission_service.dart';
 import 'package:go_router/go_router.dart';
@@ -22,6 +24,8 @@ class _ReportLostCatScreenState extends State<ReportLostCatScreen> {
   GoogleMapController? _mapController;
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _rewardController = TextEditingController();
   bool _isRegistered = true;
   String? _selectedCatName;
   bool _isLoading = false;
@@ -43,23 +47,26 @@ class _ReportLostCatScreenState extends State<ReportLostCatScreen> {
   Future<void> _handleBroadcast() async {
     final catName = _isRegistered ? _selectedCatName : _nameController.text.trim();
     final phone = _phoneController.text.trim();
+    final description = _descriptionController.text.trim();
+    final reward = _rewardController.text.trim();
 
     if (catName == null || catName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter or select cat name')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sila masukkan atau pilih nama kucing')));
       return;
     }
     if (phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter contact number')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sila masukkan nombor telefon')));
       return;
     }
     if (_pinnedLocation == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please pin location on map')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sila tandakan lokasi di peta')));
       return;
     }
 
     setState(() => _isLoading = true);
     try {
       String? imageUrl;
+      bool isVerified = false;
       
       // If image selected manually, upload it
       if (_selectedImage != null) {
@@ -73,22 +80,39 @@ class _ReportLostCatScreenState extends State<ReportLostCatScreen> {
         // Use cat's profile image if registered and no manual image picked
         final cat = appState.cats.firstWhere((c) => c.name == catName);
         imageUrl = cat.image;
+        isVerified = true;
       }
 
-      await appState.broadcastLostCat(
-        catName: catName,
-        lat: _pinnedLocation!.latitude,
-        lng: _pinnedLocation!.longitude,
-        phone: phone,
-        imageUrl: imageUrl,
-      );
+      final fullContent = "Bantu kami! Kucing bernama $catName telah hilang. ${description.isNotEmpty ? '\n\nMaklumat tambahan: $description' : ''} ${reward.isNotEmpty ? '\n\n💰 Ganjaran: RM$reward' : ''}";
+
+      await FirebaseFirestore.instance.collection('community_posts').add({
+        'author': appState.userName ?? 'User',
+        'ownerId': FirebaseAuth.instance.currentUser?.uid,
+        'title': 'KUCING HILANG: $catName',
+        'content': fullContent,
+        'category': 'Lost & found',
+        'locationLabel': 'Lokasi Terakhir Dilihat',
+        'lat': _pinnedLocation!.latitude,
+        'lng': _pinnedLocation!.longitude,
+        'phone': phone,
+        'timestamp': FieldValue.serverTimestamp(),
+        'status': 'Lost',
+        'isFlagged': false,
+        'reportCount': 0,
+        'reportedBy': [],
+        'isVerified': isVerified,
+        'imageUrl': imageUrl,
+        'reward': reward,
+      });
+
+      appState.setMyCatLost();
 
       if (mounted) {
         MeowAnimatedDialog.show(
           context,
           animationPath: 'assets/animations/lost_cat.json',
-          title: "Laporan Dibuat",
-          description: "Kami sedang menyebarkan info kehilangan kucing anda.",
+          title: "Hebahan Dibuat!",
+          description: "Info kehilangan $catName sedang disebarkan kepada komuniti Meowtrack berdekatan.",
           buttonText: "Moga Cepat Jumpa",
           themeColor: Colors.redAccent,
           onConfirm: () => context.pop(),
@@ -96,7 +120,7 @@ class _ReportLostCatScreenState extends State<ReportLostCatScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ralat: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -174,11 +198,19 @@ class _ReportLostCatScreenState extends State<ReportLostCatScreen> {
                 ],
 
                 const SizedBox(height: 20),
-                _buildLabel('Contact Number'),
-                _buildInputBox(_phoneController, 'e.g. 60123456789', keyboardType: TextInputType.phone),
+                _buildLabel('Nombor Telefon Kecemasan'),
+                _buildInputBox(_phoneController, 'Contoh: 0123456789', keyboardType: TextInputType.phone),
+
+                const SizedBox(height: 20),
+                _buildLabel('Ganjaran (Opsional)'),
+                _buildInputBox(_rewardController, 'Contoh: 500', keyboardType: TextInputType.number, suffixText: 'RM'),
+
+                const SizedBox(height: 20),
+                _buildLabel('Keterangan Tambahan'),
+                _buildInputBox(_descriptionController, 'Warna kolar, lokasi spesifik, perwatakan, dll...', maxLines: 3),
 
                 const SizedBox(height: 30),
-                _buildLabel('Attach Photo of Lost Cat (Last Seen)'),
+                _buildLabel('Muat Naik Gambar Terkini (PENTING)'),
                 _buildImagePicker(),
 
                 const SizedBox(height: 30),
@@ -226,14 +258,20 @@ class _ReportLostCatScreenState extends State<ReportLostCatScreen> {
     );
   }
 
-  Widget _buildInputBox(TextEditingController controller, String hint, {TextInputType keyboardType = TextInputType.text}) {
+  Widget _buildInputBox(TextEditingController controller, String hint, {TextInputType keyboardType = TextInputType.text, int maxLines = 1, String? suffixText}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 15),
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
       child: TextField(
         controller: controller, 
         keyboardType: keyboardType,
-        decoration: InputDecoration(hintText: hint, border: InputBorder.none)
+        maxLines: maxLines,
+        decoration: InputDecoration(
+          hintText: hint, 
+          border: InputBorder.none,
+          suffixText: suffixText,
+          suffixStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+        )
       ),
     );
   }

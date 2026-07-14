@@ -36,13 +36,25 @@ class _CatStatsScreenState extends State<CatStatsScreen> {
             const SizedBox(height: 25),
             
             // Vitals Section
-            const Text('Vitals', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.black87)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Vitals', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.black87)),
+                _buildMockBadge(),
+              ],
+            ),
             const SizedBox(height: 15),
             _buildVitalsGrid(cat),
             const SizedBox(height: 25),
             
             // Activity Section
-            const Text('Activity & Sleep', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.black87)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Activity & Sleep', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.black87)),
+                _buildMockBadge(),
+              ],
+            ),
             const SizedBox(height: 15),
             _buildActivityCard(cat),
             const SizedBox(height: 25),
@@ -108,7 +120,53 @@ class _CatStatsScreenState extends State<CatStatsScreen> {
     );
   }
 
+  Widget _buildMockBadge() {
+    return GestureDetector(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Simulated Data'),
+            content: const Text('Since you don\'t have a Meowtrack device yet, we are showing simulated health data to demonstrate how it looks.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Understood')),
+            ],
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.amber.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.amber.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.info_outline, size: 12, color: Colors.amber.shade800),
+            const SizedBox(width: 4),
+            Text(
+              'MOCK',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.amber.shade800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildVitalsGrid(Cat cat) {
+    // Mock data if real is 0
+    final mockHeartRate = cat.heartRate > 0 ? cat.heartRate : (120 + (cat.id.hashCode % 40));
+    final mockBattery = cat.battery > 0 ? cat.battery : (85.0 + (cat.id.hashCode % 10));
+    final mockDistance = cat.distance != 'Unknown' ? cat.distance : '${(150 + (cat.id.hashCode % 300))}m away';
+
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -116,9 +174,9 @@ class _CatStatsScreenState extends State<CatStatsScreen> {
       crossAxisSpacing: 15,
       mainAxisSpacing: 15,
       children: [
-        _buildStatCard('Heart Rate', '${cat.heartRate} bpm', Icons.favorite, Colors.red.shade300),
-        _buildStatCard('Battery', '${cat.battery.toStringAsFixed(0)}%', Icons.battery_full, Colors.green.shade300),
-        _buildStatCard('Distance', cat.distance, Icons.location_on, Colors.blue.shade300),
+        _buildStatCard('Heart Rate', '$mockHeartRate bpm', Icons.favorite, Colors.red.shade300),
+        _buildStatCard('Battery', '${mockBattery.toStringAsFixed(0)}%', Icons.battery_full, Colors.green.shade300),
+        _buildStatCard('Distance', mockDistance, Icons.location_on, Colors.blue.shade300),
         _buildStatCard('Status', cat.isLost ? 'Lost' : 'Safe', Icons.security, Colors.purple.shade300),
       ],
     );
@@ -153,7 +211,10 @@ class _CatStatsScreenState extends State<CatStatsScreen> {
   }
 
   Widget _buildActivityCard(Cat cat) {
-    final progress = cat.activeMinutes / cat.targetMinutes;
+    final mockActiveMinutes = cat.activeMinutes > 0 ? cat.activeMinutes : (45 + (cat.id.hashCode % 60));
+    final mockTargetMinutes = cat.targetMinutes > 0 ? cat.targetMinutes : 120;
+    final progress = mockActiveMinutes / mockTargetMinutes;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -168,7 +229,7 @@ class _CatStatsScreenState extends State<CatStatsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Daily Activity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              Text('${cat.activeMinutes}/${cat.targetMinutes} min', style: const TextStyle(fontSize: 14, color: Colors.grey)),
+              Text('$mockActiveMinutes/$mockTargetMinutes min', style: const TextStyle(fontSize: 14, color: Colors.grey)),
             ],
           ),
           const SizedBox(height: 12),
@@ -178,12 +239,12 @@ class _CatStatsScreenState extends State<CatStatsScreen> {
               value: progress.clamp(0.0, 1.0),
               minHeight: 12,
               backgroundColor: Colors.grey.shade300,
-              valueColor: AlwaysStoppedAnimation<Color>(progress > 1.0 ? Colors.green : Colors.blue.shade400),
+              valueColor: AlwaysStoppedAnimation<Color>(progress >= 1.0 ? Colors.green : Colors.blue.shade400),
             ),
           ),
           const SizedBox(height: 12),
           Text(
-            progress >= 1.0 ? '✓ Goal achieved!' : 'Keep playing! ${(cat.targetMinutes - cat.activeMinutes).toInt()} min to go',
+            progress >= 1.0 ? '✓ Goal achieved!' : 'Keep playing! ${(mockTargetMinutes - mockActiveMinutes).toInt()} min to go',
             style: TextStyle(fontSize: 12, color: progress >= 1.0 ? Colors.green : Colors.grey),
           ),
         ],
@@ -192,7 +253,10 @@ class _CatStatsScreenState extends State<CatStatsScreen> {
   }
 
   Widget _buildSleepQualityCard(Cat cat) {
-    final sleepColor = cat.sleepQuality == 'Good' ? Colors.green : cat.sleepQuality == 'Fair' ? Colors.orange : Colors.red;
+    final mockSleepQuality = cat.sleepQuality != 'Unknown' ? cat.sleepQuality : 'Good';
+    final mockSleepHours = cat.sleepHours > 0 ? cat.sleepHours : (10.0 + (cat.id.hashCode % 5));
+    final sleepColor = mockSleepQuality == 'Good' ? Colors.green : mockSleepQuality == 'Fair' ? Colors.orange : Colors.red;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -209,7 +273,7 @@ class _CatStatsScreenState extends State<CatStatsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('Sleep Hours', style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w500)),
-                  Text('${cat.sleepHours.toStringAsFixed(1)} hrs', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text('${mockSleepHours.toStringAsFixed(1)} hrs', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 ],
               ),
               Column(
@@ -222,7 +286,7 @@ class _CatStatsScreenState extends State<CatStatsScreen> {
                       color: sleepColor.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(cat.sleepQuality, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: sleepColor)),
+                    child: Text(mockSleepQuality, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: sleepColor)),
                   ),
                 ],
               ),

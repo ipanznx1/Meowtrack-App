@@ -65,7 +65,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   void _initGemini() {
-    final activeApiKey = dotenv.env['GEMINI_API_KEY'] ?? "";
+    String activeApiKey = "";
+    try {
+      activeApiKey = dotenv.env['GEMINI_API_KEY'] ?? "";
+    } catch (_) {}
+
     _model = gemini.GenerativeModel(
       model: 'gemini-1.5-flash-latest',
       apiKey: activeApiKey,

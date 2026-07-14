@@ -111,12 +111,24 @@ class _HealthOverviewPageState extends State<HealthOverviewPage> {
                 _buildHeaderCard(cat, status),
                 const SizedBox(height: 25),
 
-                const Text('Vitals', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Vitals', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    _buildMockBadge(),
+                  ],
+                ),
                 const SizedBox(height: 15),
                 _buildVitalsGrid(cat),
                 const SizedBox(height: 25),
 
-                const Text('Activity & Sleep', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Activity & Sleep', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    _buildMockBadge(),
+                  ],
+                ),
                 const SizedBox(height: 15),
                 _buildActivityCard(cat),
                 const SizedBox(height: 25),
@@ -151,7 +163,53 @@ class _HealthOverviewPageState extends State<HealthOverviewPage> {
     );
   }
 
+  Widget _buildMockBadge() {
+    return GestureDetector(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Mock Data Information'),
+            content: const Text('This data is currently simulated because a Meowtrack device is not yet connected to this cat. Once connected, you will see real-time vitals and activity.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+            ],
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.amber.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.amber.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.info_outline, size: 12, color: Colors.amber.shade800),
+            const SizedBox(width: 4),
+            Text(
+              'MOCK DATA',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.amber.shade800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildVitalsGrid(Cat cat) {
+    // Generate consistent mock data based on cat ID if real data is missing
+    final mockHeartRate = cat.heartRate > 0 ? cat.heartRate : (120 + (cat.id.hashCode % 40));
+    final mockBattery = cat.battery > 0 ? cat.battery : (75.0 + (cat.id.hashCode % 20));
+    final mockDistance = cat.distance != 'Unknown' ? cat.distance : '${(150 + (cat.id.hashCode % 500))}m away';
+
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -160,9 +218,9 @@ class _HealthOverviewPageState extends State<HealthOverviewPage> {
       mainAxisSpacing: 15,
       childAspectRatio: 1.4,
       children: [
-        _buildStatCard('Heart Rate', '${cat.heartRate} bpm', Icons.favorite, Colors.red.shade300),
-        _buildStatCard('Battery', '${cat.battery.toStringAsFixed(0)}%', Icons.battery_full, Colors.green.shade300),
-        _buildStatCard('Distance', cat.distance, Icons.location_on, Colors.blue.shade300),
+        _buildStatCard('Heart Rate', '$mockHeartRate bpm', Icons.favorite, Colors.red.shade300),
+        _buildStatCard('Battery', '${mockBattery.toStringAsFixed(0)}%', Icons.battery_full, Colors.green.shade300),
+        _buildStatCard('Distance', mockDistance, Icons.location_on, Colors.blue.shade300),
         _buildStatCard('Status', cat.isLost ? 'Lost' : 'Safe', Icons.security, Colors.purple.shade300),
       ],
     );
@@ -189,7 +247,13 @@ class _HealthOverviewPageState extends State<HealthOverviewPage> {
   }
 
   Widget _buildActivityCard(Cat cat) {
-    final progress = cat.activeMinutes / cat.targetMinutes;
+    // Generate consistent mock activity
+    final mockActiveMinutes = cat.activeMinutes > 0 ? cat.activeMinutes : (30 + (cat.id.hashCode % 60));
+    final mockTargetMinutes = cat.targetMinutes > 0 ? cat.targetMinutes : 120;
+    final mockSleepQuality = cat.sleepQuality != 'Unknown' ? cat.sleepQuality : 'Good';
+    
+    final progress = mockActiveMinutes / mockTargetMinutes;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -204,7 +268,7 @@ class _HealthOverviewPageState extends State<HealthOverviewPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Daily Activity', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-              Text('${cat.activeMinutes}/${cat.targetMinutes} min', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text('$mockActiveMinutes/$mockTargetMinutes min', style: const TextStyle(fontSize: 12, color: Colors.grey)),
             ],
           ),
           const SizedBox(height: 10),
@@ -222,7 +286,7 @@ class _HealthOverviewPageState extends State<HealthOverviewPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Sleep Quality', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-              Text(cat.sleepQuality, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)),
+              Text(mockSleepQuality, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)),
             ],
           ),
         ],

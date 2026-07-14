@@ -35,6 +35,7 @@ import 'package:meow_track/features/owner_profile/presentation/pages/user_profil
 import 'package:meow_track/features/owner_profile/presentation/pages/user_profile_setup_screen.dart';
 import 'package:meow_track/features/ar_scan/presentation/pages/ar_scan_page.dart';
 import 'package:meow_track/features/cat_profile/presentation/pages/cat_profile_page.dart';
+import 'package:meow_track/features/cat_profile/presentation/pages/edit_cat_screen.dart';
 import 'package:meow_track/features/cat_profile/presentation/pages/add_cat_screen.dart';
 import 'package:meow_track/features/cat_profile/presentation/pages/report_lost_cat_screen.dart';
 import 'package:meow_track/features/cat_profile/presentation/pages/health_overview_page.dart';
@@ -206,6 +207,14 @@ class AppRouter {
           final cat = _findCat(state.pathParameters['id'], state.extra);
           if (cat == null) return const Scaffold(body: Center(child: Text('Cat data missing. Please go back to Dashboard.')));
           return CatProfilePage(cat: cat);
+        },
+      ),
+      GoRoute(
+        path: '/edit-cat/:id',
+        builder: (context, state) {
+          final cat = _findCat(state.pathParameters['id'], state.extra);
+          if (cat == null) return const Scaffold(body: Center(child: Text('Cat data missing')));
+          return EditCatScreen(cat: cat);
         },
       ),
       GoRoute(

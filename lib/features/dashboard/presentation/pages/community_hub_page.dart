@@ -464,6 +464,7 @@ Muat turun Meowtrack untuk membantu kami!
             ownerId: data['ownerId'] ?? '',
             isVerified: data['isVerified'] ?? false,
             imageUrl: data['imageUrl'],
+            reward: data['reward'],
           );
         }).where((post) {
           if (_selectedPostCategory != 'All' && post.category != _selectedPostCategory) return false;
@@ -508,6 +509,10 @@ Muat turun Meowtrack untuk membantu kami!
                     Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: const Color(0xFFFFF2D9), borderRadius: BorderRadius.circular(16)), child: Text(post.category, style: const TextStyle(color: Color(0xFF985BEF), fontWeight: FontWeight.w900, fontSize: 12))),
                     const SizedBox(width: 8),
                     if (isLostFound) Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Text(post.status.toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10))),
+                    if (post.isVerified) ...[
+                      const SizedBox(width: 8),
+                      const Icon(Icons.verified, color: Colors.blue, size: 18),
+                    ],
                     const Spacer(),
                     Text('${post.timestamp.hour}:${post.timestamp.minute.toString().padLeft(2, '0')}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                     const SizedBox(width: 8),
@@ -520,6 +525,21 @@ Muat turun Meowtrack untuk membantu kami!
                 ),
                 const SizedBox(height: 14),
                 Text(post.title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                if (post.reward != null && post.reward!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.payments_outlined, color: Colors.green, size: 16),
+                        const SizedBox(width: 6),
+                        Text('Ganjaran: RM${post.reward}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Text(post.content, style: const TextStyle(color: Colors.grey, fontSize: 14)),
                 const SizedBox(height: 10),

@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_generative_ai/google_generative_ai.dart' as gemini;
 import 'package:google_mlkit_subject_segmentation/google_mlkit_subject_segmentation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -27,6 +28,19 @@ class _AddCatIdentityScreenState extends State<AddCatIdentityScreen> {
   final _ageController = TextEditingController();
   String _selectedBreed = 'British Shorthair';
   String _selectedGender = 'Female';
+  String _ageUnit = 'Years'; // 'Weeks', 'Months', 'Years'
+  Color _selectedColor = const Color(0xFFD0E0FF);
+
+  final List<Color> _themeColors = [
+    const Color(0xFFD0E0FF), // Light Blue
+    const Color(0xFFE1BEE7), // Purple
+    const Color(0xFFFFD1DC), // Pink
+    const Color(0xFFFFCC80), // Orange
+    const Color(0xFFD1FFD1), // Green
+    const Color(0xFFFFF9C4), // Yellow
+    const Color(0xFFB3E5FC), // Sky Blue
+    const Color(0xFFFFCDD2), // Rose
+  ];
 
   String? aiSuggestedBreed;
   String? aiExplanation;
@@ -103,7 +117,70 @@ class _AddCatIdentityScreenState extends State<AddCatIdentityScreen> {
             const SizedBox(height: 20),
             const Text('How old is your cat?', style: TextStyle(fontSize: 14)),
             const SizedBox(height: 8),
-            _buildTextField(_ageController, 'Age in years', 'assets/icons/Current weight.svg'),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: _buildTextField(_ageController, 'Value', 'assets/icons/Current weight.svg'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _ageUnit,
+                        isExpanded: true,
+                        items: ['Weeks', 'Months', 'Years'].map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                        onChanged: (v) => setState(() => _ageUnit = v!),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 25),
+            const Text('Choose Theme Color', style: TextStyle(fontSize: 14)),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 50,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _themeColors.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 15),
+                itemBuilder: (context, index) {
+                  final color = _themeColors[index];
+                  final isSelected = _selectedColor == color;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedColor = color),
+                    child: Container(
+                      width: 50,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFF985BEF) : Colors.white,
+                          width: isSelected ? 3 : 2,
+                        ),
+                        boxShadow: [
+                          if (isSelected)
+                            BoxShadow(
+                              color: const Color(0xFF985BEF).withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              spreadRadius: 2,
+                            )
+                        ],
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check, color: Color(0xFF985BEF), size: 24)
+                          : null,
+                    ),
+                  );
+                },
+              ),
+            ),
             const SizedBox(height: 40),
             _buildUploadButton(),
             const SizedBox(height: 40),
@@ -135,7 +212,9 @@ class _AddCatIdentityScreenState extends State<AddCatIdentityScreen> {
       'name': _nameController.text.trim(),
       'breed': _selectedBreed,
       'gender': _selectedGender,
-      'age': _ageController.text.trim(),
+      'ageValue': _ageController.text.trim(),
+      'ageUnit': _ageUnit,
+      'themeColor': _selectedColor.value,
       'imagePath': _processedImageFile?.path,
     });
   }
@@ -148,7 +227,11 @@ class _AddCatIdentityScreenState extends State<AddCatIdentityScreen> {
     });
 
     try {
-      final activeApiKey = dotenv.env['GEMINI_API_KEY'] ?? "";
+      String activeApiKey = "";
+      try {
+        activeApiKey = dotenv.env['GEMINI_API_KEY'] ?? "";
+      } catch (_) {}
+
       final model = gemini.GenerativeModel(
         model: 'gemini-1.5-flash-latest',
         apiKey: activeApiKey,
@@ -420,20 +503,55 @@ class AddCatHealthScreen extends StatefulWidget {
 class _AddCatHealthScreenState extends State<AddCatHealthScreen> {
   final _weightController = TextEditingController();
   final _allergyController = TextEditingController();
-  final _lastVaxController = TextEditingController();
+  DateTime? _selectedVaxDate;
   bool _isNeutered = true;
   bool _isVaxUpToDate = true;
+  bool _hasNeverVaccinated = false;
   bool _isSubmitting = false;
+  String _weightUnit = 'kg'; // 'kg', 'g'
+
+  @override
+  void initState() {
+    super.initState();
+    // Default unit based on age: if weeks or early months, suggest grams
+    final ageUnit = widget.identityData['ageUnit'] as String;
+    if (ageUnit == 'Weeks') {
+      _weightUnit = 'g';
+    }
+  }
 
   @override
   void dispose() {
     _weightController.dispose();
     _allergyController.dispose();
-    _lastVaxController.dispose();
     super.dispose();
   }
 
-  bool get _canSubmit => _weightController.text.isNotEmpty && _allergyController.text.isNotEmpty && !_isSubmitting;
+  Future<void> _selectVaxDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF985BEF)),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _selectedVaxDate = picked);
+    }
+  }
+
+  bool get _canSubmit {
+    if (_weightController.text.isEmpty || _allergyController.text.isEmpty || _isSubmitting) return false;
+    if (_isVaxUpToDate && _selectedVaxDate == null) return false;
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -456,9 +574,32 @@ class _AddCatHealthScreenState extends State<AddCatHealthScreen> {
             const SizedBox(height: 40),
             const Text('Health', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
-            const Text('What is their current weight (kg)?', style: TextStyle(fontSize: 14)),
+            const Text('What is their current weight?', style: TextStyle(fontSize: 14)),
             const SizedBox(height: 8),
-            _buildTextField(_weightController, 'Current weight', 'assets/icons/Current weight.svg'),
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: _buildTextField(_weightController, 'Weight', 'assets/icons/Current weight.svg'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _weightUnit,
+                        isExpanded: true,
+                        items: ['kg', 'g'].map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                        onChanged: (v) => setState(() => _weightUnit = v!),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 20),
             const Text('Is your cat neutered/spayed?', style: TextStyle(fontSize: 14)),
             const SizedBox(height: 12),
@@ -472,12 +613,51 @@ class _AddCatHealthScreenState extends State<AddCatHealthScreen> {
             const SizedBox(height: 20),
             const Text('Are their vaccinations up to date?', style: TextStyle(fontSize: 14)),
             const SizedBox(height: 12),
-            _buildChoiceRow('Yes', selected: _isVaxUpToDate, onTap: () => setState(() => _isVaxUpToDate = true)),
+            _buildChoiceRow('Yes', selected: _isVaxUpToDate, onTap: () => setState(() {
+              _isVaxUpToDate = true;
+              _hasNeverVaccinated = false;
+            })),
             const SizedBox(height: 12),
             _buildChoiceRow('No', selected: !_isVaxUpToDate, onTap: () => setState(() => _isVaxUpToDate = false)),
+            
             if (!_isVaxUpToDate) ...[
+              const SizedBox(height: 15),
+              Row(
+                children: [
+                  Checkbox(
+                    value: _hasNeverVaccinated,
+                    activeColor: const Color(0xFF985BEF),
+                    onChanged: (val) => setState(() => _hasNeverVaccinated = val ?? false),
+                  ),
+                  const Expanded(
+                    child: Text("Cat has never been vaccinated (e.g. newborn/rescue)", 
+                      style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ],
+
+            if (_isVaxUpToDate) ...[
               const SizedBox(height: 20),
-              _buildTextField(_lastVaxController, 'Last vaccine date', 'assets/icons/Calendar.svg'),
+              GestureDetector(
+                onTap: () => _selectVaxDate(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                  child: Row(
+                    children: [
+                      Text(
+                        _selectedVaxDate == null 
+                          ? 'Select Last Vaccination Date' 
+                          : '${_selectedVaxDate!.day}/${_selectedVaxDate!.month}/${_selectedVaxDate!.year}',
+                        style: TextStyle(color: _selectedVaxDate == null ? Colors.grey : Colors.black87),
+                      ),
+                      const Spacer(),
+                      SvgPicture.asset('assets/icons/Calendar.svg', width: 20, colorFilter: const ColorFilter.mode(Color(0xFF985BEF), BlendMode.srcIn)),
+                    ],
+                  ),
+                ),
+              ),
             ],
             const SizedBox(height: 40),
             Center(
@@ -507,24 +687,50 @@ class _AddCatHealthScreenState extends State<AddCatHealthScreen> {
     setState(() => _isSubmitting = true);
 
     try {
+      final ageValue = widget.identityData['ageValue'] as String;
+      final ageUnit = widget.identityData['ageUnit'] as String;
+      
       final newCat = Cat(
         id: catId,
         name: widget.identityData['name'] as String,
         breed: widget.identityData['breed'] as String,
         gender: widget.identityData['gender'] as String,
-        themeColor: const Color(0xFFD0E0FF),
+        themeColor: Color(widget.identityData['themeColor'] as int? ?? 0xFFD0E0FF),
         image: 'assets/images/new_cat.png',
         ownerId: user?.uid ?? '',
         collaborators: [],
       );
 
-      final weight = double.tryParse(_weightController.text) ?? 0.0;
+      double weight = double.tryParse(_weightController.text) ?? 0.0;
+      // If entered in grams, convert to kg for storage, but keep unit info for record
+      if (_weightUnit == 'g') {
+        // We'll store it as is for the registration, but the record will have the correct unit.
+      }
 
       await appState.performFullCatRegistration(
         cat: newCat,
         initialWeight: weight,
         imageFile: localImagePath != null ? File(localImagePath) : null,
       );
+
+      // 🎯 NEWBORN MILESTONES: Add special metadata to Firestore for kittens
+      if (ageUnit == 'Weeks' || (ageUnit == 'Months' && int.parse(ageValue) < 4)) {
+        await FirebaseFirestore.instance.collection('cats').doc(catId).update({
+          'isKitten': true,
+          'ageLabel': '$ageValue $ageUnit',
+          'lastVaccinationDate': _hasNeverVaccinated ? null : _selectedVaxDate,
+          'neverVaccinated': _hasNeverVaccinated,
+          'birthDate': DateTime.now().subtract(Duration(
+            days: ageUnit == 'Weeks' ? int.parse(ageValue) * 7 : (ageUnit == 'Months' ? int.parse(ageValue) * 30 : int.parse(ageValue) * 365)
+          )),
+        });
+      } else {
+        // Even for adult cats, store the vaccination info
+        await FirebaseFirestore.instance.collection('cats').doc(catId).update({
+          'lastVaccinationDate': _isVaxUpToDate ? _selectedVaxDate : null,
+          'neverVaccinated': _hasNeverVaccinated,
+        });
+      }
 
       if (mounted) {
         MeowAnimatedDialog.show(
