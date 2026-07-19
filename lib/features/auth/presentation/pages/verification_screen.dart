@@ -281,6 +281,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                       ),
                     ],
                   ),
+                ],
                 const SizedBox(height: 15),
 
                 if (_hasError)
