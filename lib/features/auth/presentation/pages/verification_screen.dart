@@ -242,9 +242,29 @@ class _VerificationScreenState extends State<VerificationScreen> {
                    const Text("Status: Verified", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                 ],
                 
-                const SizedBox(height: 60),
-
-                if (!isVerifiedButNeedsRole)
+                  const SizedBox(height: 60),
+                if (!isVerifiedButNeedsRole) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Tips: Sila semak folder SPAM jika emel pengesahan tidak dijumpai di Inbox.',
+                            style: TextStyle(color: Colors.orange[800], fontSize: 12, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
