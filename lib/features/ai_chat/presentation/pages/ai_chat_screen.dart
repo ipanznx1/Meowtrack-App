@@ -323,12 +323,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
       }
     } catch (e) {
       debugPrint("Gemini Error: $e");
-      String errorMessage = "Meow! Something went wrong.";
-      if (e.toString().contains("API_KEY_INVALID") || e.toString().contains("403") || e.toString().contains("400")) {
-        errorMessage = "Meow! API Key tidak sah atau tidak aktif. Sila semak setting Firebase.";
-      } else if (e.toString().contains("SAFETY")) {
-        errorMessage = "Meow! Kandungan ini disekat oleh filter keselamatan.";
+      String rawError = e.toString();
+      String errorMessage = "Meow! Ralat dikesan: $rawError";
+      
+      if (rawError.contains("API_KEY_INVALID")) {
+        errorMessage = "Meow! API Key anda tidak sah. Sila pastikan anda salin kunci dari Google AI Studio dengan betul.";
+      } else if (rawError.contains("location not supported")) {
+        errorMessage = "Meow! Gemini belum menyokong kawasan anda. Sila guna VPN atau tunggu kemaskini Google.";
       }
+
       await appState.addMessageToActiveSession(errorMessage, false);
     } finally {
       if (mounted) setState(() => _isAnalyzing = false);
