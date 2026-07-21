@@ -73,6 +73,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
     if (activeApiKey.isEmpty) {
       activeApiKey = appState.geminiApiKey;
     }
+    
+    // BACKUP HARDCODE (Hanya untuk testing anda)
+    if (activeApiKey.isEmpty) {
+       activeApiKey = "AIzaSyCC-ttQzwB7VW19vfDpK0xY_qyzDOpVOdo";
+    }
 
     if (activeApiKey.isNotEmpty) {
       _model = gemini.GenerativeModel(
