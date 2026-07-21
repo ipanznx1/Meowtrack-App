@@ -24,7 +24,12 @@ class _KibbleTrackerScreenState extends State<KibbleTrackerScreen> {
     try {
       final envKey = dotenv.env['GEMINI_API_KEY'];
       if (envKey != null && envKey.isNotEmpty) return envKey;
-      return appState.geminiApiKey;
+      
+      final remoteKey = appState.geminiApiKey;
+      if (remoteKey.isNotEmpty) return remoteKey;
+
+      // BACKUP HARDCODE LOCAL
+      return "AIzaSyCC-ttQzwB7VW19vfDpK0xY_qyzDOpVOdo";
     } catch (_) {
       return appState.geminiApiKey;
     }

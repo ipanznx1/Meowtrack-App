@@ -74,9 +74,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
       activeApiKey = appState.geminiApiKey;
     }
     
-    // BACKUP HARDCODE (Hanya untuk testing anda)
-    if (activeApiKey.isEmpty) {
-       activeApiKey = "AIzaSyCC-ttQzwB7VW19vfDpK0xY_qyzDOpVOdo";
+    // BACKUP HARDCODE (Hanya untuk testing local anda - JANGAN PUSH KE GITHUB)
+    if (activeApiKey.isEmpty || activeApiKey == "AIzaSyCC-ttQzwB7VW19vfDpK0xY_qyzDOpVOdo") {
+       activeApiKey = "MASUKKAN_KEY_DI_SINI";
     }
 
     if (activeApiKey.isNotEmpty) {

@@ -235,9 +235,14 @@ class _AddCatIdentityScreenState extends State<AddCatIdentityScreen> {
       if (activeApiKey.isEmpty) {
         activeApiKey = appState.geminiApiKey;
       }
+      
+      // BACKUP HARDCODE (Hanya untuk testing local anda - JANGAN PUSH KE GITHUB)
+      if (activeApiKey.isEmpty || activeApiKey == "AIzaSyCC-ttQzwB7VW19vfDpK0xY_qyzDOpVOdo") {
+        activeApiKey = "AIzaSyCC-ttQzwB7VW19vfDpK0xY_qyzDOpVOdo";
+      }
 
       final model = gemini.GenerativeModel(
-        model: 'gemini-1.5-flash-latest',
+        model: 'gemini-1.5-flash',
         apiKey: activeApiKey,
       );
 
@@ -264,7 +269,10 @@ class _AddCatIdentityScreenState extends State<AddCatIdentityScreen> {
     } catch (e) {
       debugPrint("Detect Breed Error: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("AI Detection failed. Please try again.")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("AI Detection failed: ${e.toString()}"),
+          duration: const Duration(seconds: 5),
+        ));
       }
     } finally {
       if (mounted) setState(() => _isDetecting = false);
