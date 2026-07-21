@@ -21,7 +21,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  late final gemini.GenerativeModel _model;
+  gemini.GenerativeModel? _model;
   final SpeechToText _speechToText = SpeechToText();
   bool _speechEnabled = false;
   String _lastWords = '';
@@ -74,11 +74,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
       activeApiKey = appState.geminiApiKey;
     }
 
-    _model = gemini.GenerativeModel(
-      model: 'gemini-1.5-flash-latest',
-      apiKey: activeApiKey,
-      systemInstruction: gemini.Content.system("You are 'AI Paws', an expert cat care assistant."),
-    );
+    if (activeApiKey.isNotEmpty) {
+      _model = gemini.GenerativeModel(
+        model: 'gemini-1.5-flash', // Guna nama model yang lebih standard
+        apiKey: activeApiKey,
+        systemInstruction: gemini.Content.system("You are 'AI Paws', an expert cat care assistant."),
+      );
+    }
   }
 
   Future<void> _initSpeech() async {
@@ -296,6 +298,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty || _isAnalyzing) return;
 
+    // Jika model belum ready, cuba init balik (mana tahu key baru sampai dari Firebase)
+    if (_model == null) {
+      _initGemini();
+    }
+
+    if (_model == null) {
+      await appState.addMessageToActiveSession("Meow! Sistem AI belum sedia. Sila semak API Key.", false);
+      return;
+    }
+
     _messageController.clear();
     setState(() => _isAnalyzing = true);
 
@@ -303,14 +315,21 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _scrollToBottom();
 
     try {
-      final response = await _model.generateContent([gemini.Content.text(text)]);
+      final response = await _model!.generateContent([gemini.Content.text(text)]);
       final aiText = response.text;
       if (aiText != null) {
         await appState.addMessageToActiveSession(aiText, false);
         _scrollToBottom();
       }
     } catch (e) {
-      await appState.addMessageToActiveSession("Meow! Something went wrong.", false);
+      debugPrint("Gemini Error: $e");
+      String errorMessage = "Meow! Something went wrong.";
+      if (e.toString().contains("API_KEY_INVALID") || e.toString().contains("403") || e.toString().contains("400")) {
+        errorMessage = "Meow! API Key tidak sah atau tidak aktif. Sila semak setting Firebase.";
+      } else if (e.toString().contains("SAFETY")) {
+        errorMessage = "Meow! Kandungan ini disekat oleh filter keselamatan.";
+      }
+      await appState.addMessageToActiveSession(errorMessage, false);
     } finally {
       if (mounted) setState(() => _isAnalyzing = false);
     }

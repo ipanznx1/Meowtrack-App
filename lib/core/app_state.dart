@@ -426,7 +426,7 @@ class AppStateController extends ChangeNotifier {
       final remoteConfig = FirebaseRemoteConfig.instance;
       await remoteConfig.setConfigSettings(RemoteConfigSettings(
         fetchTimeout: const Duration(minutes: 1),
-        minimumFetchInterval: const Duration(hours: 1),
+        minimumFetchInterval: Duration.zero, // Biar update terus nampak masa testing
       ));
       
       // Default value if fetch fails
