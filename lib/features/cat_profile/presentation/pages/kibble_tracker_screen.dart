@@ -19,12 +19,14 @@ class _KibbleTrackerScreenState extends State<KibbleTrackerScreen> {
   final ImagePicker _picker = ImagePicker();
   double _kcalPer100g = 350.0; // Default: 3.5 kcal/g
 
-  // Ambil nilai dari .env secara selamat
+  // Ambil nilai dari .env atau Remote Config secara selamat
   String get _geminiApiKey {
     try {
-      return dotenv.env['GEMINI_API_KEY'] ?? "";
+      final envKey = dotenv.env['GEMINI_API_KEY'];
+      if (envKey != null && envKey.isNotEmpty) return envKey;
+      return appState.geminiApiKey;
     } catch (_) {
-      return "";
+      return appState.geminiApiKey;
     }
   }
 

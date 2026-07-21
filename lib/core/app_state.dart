@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
@@ -301,6 +302,10 @@ class AppStateController extends ChangeNotifier {
   String? pendingVerificationPhone;
   List<String> availableRoles = [];
   
+  // AI Config
+  String _geminiApiKey = "";
+  String get geminiApiKey => _geminiApiKey;
+
   // Usage tracking
   int aiRequestsThisMinute = 0;
   int aiRequestsToday = 0;
@@ -391,6 +396,7 @@ class AppStateController extends ChangeNotifier {
 
   Future<void> init() async {
     await _checkSecurity();
+    await _initRemoteConfig();
     _setupTokenRefreshListener();
     _loadUsageStats();
     // 🎯 INITIAL FCM SAVE (In case already logged in)
@@ -413,6 +419,27 @@ class AppStateController extends ChangeNotifier {
       _isDeviceSecure = true; // Fallback
     }
     notifyListeners();
+  }
+
+  Future<void> _initRemoteConfig() async {
+    try {
+      final remoteConfig = FirebaseRemoteConfig.instance;
+      await remoteConfig.setConfigSettings(RemoteConfigSettings(
+        fetchTimeout: const Duration(minutes: 1),
+        minimumFetchInterval: const Duration(hours: 1),
+      ));
+      
+      // Default value if fetch fails
+      await remoteConfig.setDefaults({
+        "gemini_api_key": "",
+      });
+
+      await remoteConfig.fetchAndActivate();
+      _geminiApiKey = remoteConfig.getString("gemini_api_key");
+      debugPrint("Remote Config: Gemini Key Fetched");
+    } catch (e) {
+      debugPrint("Remote Config Error: $e");
+    }
   }
 
   // Example of using Secure Storage for sensitive data

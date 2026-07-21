@@ -232,6 +232,10 @@ class _AddCatIdentityScreenState extends State<AddCatIdentityScreen> {
         activeApiKey = dotenv.env['GEMINI_API_KEY'] ?? "";
       } catch (_) {}
 
+      if (activeApiKey.isEmpty) {
+        activeApiKey = appState.geminiApiKey;
+      }
+
       final model = gemini.GenerativeModel(
         model: 'gemini-1.5-flash-latest',
         apiKey: activeApiKey,

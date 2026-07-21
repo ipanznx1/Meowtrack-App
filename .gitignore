@@ -36,6 +36,11 @@ Podfile.lock
 [Uu]serSettings/
 unityLibrary/symbols.zip
 
+# Environment Variables & Sensitive Data
+.env*
+secrets.xml
+tokens.json
+
 # Logic
 *.log
 .DS_Store
