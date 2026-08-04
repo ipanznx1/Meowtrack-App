@@ -14,6 +14,23 @@ class PurrmatesPage extends StatefulWidget {
 
 class _PurrmatesPageState extends State<PurrmatesPage> {
   final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   void _showAddPurrmateDialog() {
     final codeController = TextEditingController();
@@ -163,23 +180,39 @@ class _PurrmatesPageState extends State<PurrmatesPage> {
               ],
 
               Expanded(
-                child: appState.friends.isEmpty 
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text("No purr-mates yet."),
-                          Text("Your Purr Code: ${appState.purrCode ?? '...'}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
+                child: ListenableBuilder(
+                  listenable: appState,
+                  builder: (context, _) {
+                    final filteredFriends = appState.friends.where((f) {
+                      return f.name.toLowerCase().contains(_searchQuery) || 
+                             f.username.toLowerCase().contains(_searchQuery);
+                    }).toList();
+
+                    if (appState.friends.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text("No purr-mates yet."),
+                            Text("Your Purr Code: ${appState.purrCode ?? '...'}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (filteredFriends.isEmpty && _searchQuery.isNotEmpty) {
+                      return const Center(child: Text("No matches found."));
+                    }
+
+                    return ListView.builder(
                       padding: const EdgeInsets.all(20),
-                      itemCount: appState.friends.length,
+                      itemCount: filteredFriends.length,
                       itemBuilder: (context, index) {
-                        return _buildContactCard(appState.friends[index]);
+                        return _buildContactCard(filteredFriends[index]);
                       },
-                    ),
+                    );
+                  },
+                ),
               ),
             ],
           ),

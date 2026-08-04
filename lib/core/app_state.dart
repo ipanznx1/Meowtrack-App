@@ -283,6 +283,20 @@ class AppStateController extends ChangeNotifier {
   int _trackingDays = 0;
   int get trackingDays => _trackingDays;
 
+  double get rankProgress {
+    int score = (cats.length * 30) + 
+                (_trackingDays * 5) + 
+                (pawStreak * 15) + 
+                (friends.length * 10) +
+                (appointments.length * 5);
+    
+    if (score < 50) return score / 50;
+    if (score < 150) return (score - 50) / 100;
+    if (score < 400) return (score - 150) / 250;
+    if (score < 800) return (score - 400) / 400;
+    return 1.0;
+  }
+
   // 🎯 DAILY CARE & STREAK SYSTEM
   int pawStreak = 0;
   List<Map<String, dynamic>> dailyTasks = [

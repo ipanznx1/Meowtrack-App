@@ -4,20 +4,44 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:meow_track/core/app_state.dart';
 
-class NotesPage extends StatelessWidget {
+class NotesPage extends StatefulWidget {
   final Cat cat;
   const NotesPage({super.key, required this.cat});
 
   @override
+  State<NotesPage> createState() => _NotesPageState();
+}
+
+class _NotesPageState extends State<NotesPage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: cat.themeColor,
+      backgroundColor: widget.cat.themeColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: SvgPicture.asset('assets/icons/Back.svg', width: 24, height: 24, colorFilter: const ColorFilter.mode(Colors.black, BlendMode.srcIn)),
-          onPressed: () => context.pop(),
+          onPressed: () => Navigator.pop(context),
         ),
         title: const Text('Notes', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         centerTitle: true,
@@ -33,8 +57,9 @@ class NotesPage extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 15),
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
-                    child: const TextField(
-                      decoration: InputDecoration(
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: const InputDecoration(
                         hintText: 'Search...',
                         border: InputBorder.none,
                         suffixIcon: Icon(Icons.search, color: Color(0xFF985BEF)),
@@ -57,7 +82,7 @@ class NotesPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: ElevatedButton(
-              onPressed: () => context.push('/notes/${cat.id}/add', extra: cat),
+              onPressed: () => context.push('/notes/${widget.cat.id}/add', extra: widget.cat),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 45),
@@ -73,7 +98,7 @@ class NotesPage extends StatelessWidget {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('cats')
-                  .doc(cat.id)
+                  .doc(widget.cat.id)
                   .collection('health_records')
                   .where('type', isEqualTo: 'note')
                   .orderBy('timestamp', descending: true)
@@ -85,14 +110,26 @@ class NotesPage extends StatelessWidget {
                 if (snapshot.hasError) {
                   return const Center(child: Text('Something went wrong'));
                 }
-                final notes = snapshot.data?.docs ?? [];
-                if (notes.isEmpty) {
+                
+                final allNotes = snapshot.data?.docs ?? [];
+                final filteredNotes = allNotes.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final title = (data['title'] ?? '').toString().toLowerCase();
+                  final content = (data['content'] ?? '').toString().toLowerCase();
+                  return title.contains(_searchQuery) || content.contains(_searchQuery);
+                }).toList();
+
+                if (allNotes.isEmpty) {
                   return const Center(child: Text('No notes found.', style: TextStyle(color: Colors.grey)));
+                }
+
+                if (filteredNotes.isEmpty && _searchQuery.isNotEmpty) {
+                  return const Center(child: Text('No matching notes.', style: TextStyle(color: Colors.white)));
                 }
 
                 return GridView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: notes.length,
+                  itemCount: filteredNotes.length,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 15,
@@ -100,7 +137,7 @@ class NotesPage extends StatelessWidget {
                     childAspectRatio: 0.85,
                   ),
                   itemBuilder: (context, index) {
-                    final noteData = notes[index].data() as Map<String, dynamic>;
+                    final noteData = filteredNotes[index].data() as Map<String, dynamic>;
                     return _buildNoteCard(context, noteData);
                   },
                 );

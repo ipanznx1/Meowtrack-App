@@ -243,7 +243,12 @@ class _AddCatIdentityScreenState extends State<AddCatIdentityScreen> {
 
       final content = [
         gemini.Content.multi([
-          gemini.TextPart('Identify the breed of this cat. Output format: [BREED_NAME]\n[EXPLANATION]. Keep the explanation educational.'),
+          gemini.TextPart(
+            "Check if this image contains a cat. "
+            "If it is NOT a cat, respond EXACTLY with 'ERROR: NOT_A_CAT'. "
+            "If it IS a cat, identify the breed. "
+            "Output format: [BREED_NAME]\n[EXPLANATION]. Keep the explanation educational."
+          ),
           gemini.DataPart('image/jpeg', await imageFile.readAsBytes()),
         ])
       ];
@@ -252,6 +257,20 @@ class _AddCatIdentityScreenState extends State<AddCatIdentityScreen> {
       final text = response.text;
 
       if (text != null) {
+        if (text.contains("ERROR: NOT_A_CAT")) {
+          setState(() {
+            aiSuggestedBreed = null;
+            aiExplanation = null;
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text("Meow! Ini bukan gambar kucing. Sila ambil gambar kucing anda sahaja."),
+              backgroundColor: Colors.redAccent,
+            ));
+          }
+          return;
+        }
+
         final parts = text.split('\n');
         final breed = parts[0].replaceAll('[', '').replaceAll(']', '').trim();
         final explanation = parts.length > 1 ? parts.skip(1).join('\n').trim() : "No explanation provided.";

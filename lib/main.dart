@@ -10,6 +10,7 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart';
 import 'package:showcaseview/showcaseview.dart';
 
@@ -48,6 +49,14 @@ void main() async {
     } else {
       await Firebase.initializeApp();
     }
+
+    // 🎯 INITIALIZE FIREBASE APP CHECK
+    // Ini memastikan hanya app asli anda boleh akses Firebase.
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+      appleProvider: AppleProvider.deviceCheck,
+      webProvider: ReCaptchaV3Provider('YOUR_RECAPTCHA_V3_SITE_KEY'),
+    );
   } catch (e) {
     print('Firebase initialization error: $e');
   }

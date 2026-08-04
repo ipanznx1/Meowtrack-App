@@ -183,19 +183,19 @@ class OwnerProfilePage extends StatelessWidget {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(10),
-                              child: const LinearProgressIndicator(
-                                value: 0.6, // Simplified for now
-                                backgroundColor: Color(0xFFF2F2F7),
-                                color: Color(0xFF985BEF),
+                              child: LinearProgressIndicator(
+                                value: state.rankProgress,
+                                backgroundColor: const Color(0xFFF2F2F7),
+                                color: const Color(0xFF985BEF),
                                 minHeight: 8,
                               ),
                             ),
                             const SizedBox(height: 6),
-                            const Row(
+                            Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text('Progress to next rank', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-                                Text('60%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF985BEF))),
+                                const Text('Progress to next rank', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                Text('${(state.rankProgress * 100).toInt()}%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF985BEF))),
                               ],
                             ),
                           ],

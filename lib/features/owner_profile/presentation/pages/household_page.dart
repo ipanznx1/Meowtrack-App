@@ -189,108 +189,113 @@ class _HouseholdPageState extends State<HouseholdPage> {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     final bool isOwner = cat.isOwner(uid);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(35), // More rounded as requested
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04), 
-            blurRadius: 15, 
-            offset: const Offset(0, 8)
-          )
-        ],
-      ),
-      child: Column(
-        children: [
-          // 1. IMAGE SECTION (Lighter background like image)
-          Expanded(
-            flex: 5,
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: cat.themeColor.withOpacity(0.15), // Very light pastel
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(35)),
-              ),
-              child: Center(
-                child: Transform.scale(
-                  scale: cat.imageScale * 1.1,
-                  child: Padding(
-                    padding: const EdgeInsets.all(15.0),
-                    child: (cat.image.startsWith('http')) 
-                      ? Image.network(cat.image, fit: BoxFit.contain)
-                      : Image.asset(cat.image, fit: BoxFit.contain),
+    return GestureDetector(
+      onTap: () => context.push('/cat-profile/${cat.id}', extra: cat),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(35),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04), 
+              blurRadius: 15, 
+              offset: const Offset(0, 8)
+            )
+          ],
+        ),
+        child: Column(
+          children: [
+            // 1. IMAGE SECTION (Lighter background like image)
+            Expanded(
+              flex: 5,
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: cat.themeColor.withOpacity(0.15),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(35)),
+                ),
+                child: Center(
+                  child: Transform.scale(
+                    scale: cat.imageScale * 1.1,
+                    child: Padding(
+                      padding: const EdgeInsets.all(15.0),
+                      child: (cat.image.startsWith('http')) 
+                        ? Image.network(cat.image, fit: BoxFit.contain)
+                        : (cat.image.startsWith('/') || cat.image.contains('cat_cutout')
+                            ? Image.file(File(cat.image), fit: BoxFit.contain)
+                            : Image.asset(cat.image, fit: BoxFit.contain)),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          
-          // 2. INFO SECTION
-          Expanded(
-            flex: 6,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
-              child: Column(
-                children: [
-                  Text(
-                    cat.name.toLowerCase(), // Image shows lowercase name
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87), 
-                    textAlign: TextAlign.center, 
-                    overflow: TextOverflow.ellipsis
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    cat.breed.toUpperCase(), 
-                    style: TextStyle(fontSize: 10, color: Colors.grey[400], fontWeight: FontWeight.w900, letterSpacing: 0.5), 
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    cat.gender, 
-                    style: TextStyle(fontSize: 10, color: Colors.grey[400]),
-                  ),
-                  
-                  const Spacer(),
-                  
-                  // 3. ACTION SECTION
-                  if (_isManaging && isOwner)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit_note, color: Color(0xFF985BEF)),
-                          onPressed: () => _editCat(cat),
+            
+            // 2. INFO SECTION
+            Expanded(
+              flex: 6,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                child: Column(
+                  children: [
+                    Text(
+                      cat.name.toLowerCase(),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87), 
+                      textAlign: TextAlign.center, 
+                      overflow: TextOverflow.ellipsis
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      cat.breed.toUpperCase(), 
+                      style: TextStyle(fontSize: 10, color: Colors.grey[400], fontWeight: FontWeight.w900, letterSpacing: 0.5), 
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      cat.gender, 
+                      style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+                    ),
+                    
+                    const Spacer(),
+                    
+                    // 3. ACTION SECTION
+                    if (_isManaging && isOwner)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_note, color: Color(0xFF985BEF)),
+                            onPressed: () => _editCat(cat),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                            onPressed: () => _confirmDelete(cat),
+                          ),
+                        ],
+                      )
+                    else if (isOwner)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: ElevatedButton(
+                          onPressed: () => _showShareDialog(cat),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF985BEF),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                            elevation: 0,
+                          ),
+                          child: const Text("Share Access", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () => _confirmDelete(cat),
-                        ),
-                      ],
-                    )
-                  else if (isOwner)
-                    Container(
-                      width: double.infinity,
-                      height: 40,
-                      child: ElevatedButton(
-                        onPressed: () => _showShareDialog(cat),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF985BEF),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                          elevation: 0,
-                        ),
-                        child: const Text("Share Access", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                      ),
-                    )
-                  else
-                    const Text("Shared Profile", style: TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic)),
-                ],
+                      )
+                    else
+                      const Text("Shared Profile", style: TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic)),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

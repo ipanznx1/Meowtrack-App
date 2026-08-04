@@ -17,6 +17,24 @@ class DocumentPage extends StatefulWidget {
 
 class _DocumentPageState extends State<DocumentPage> {
   bool _isUploading = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _uploadDocument() async {
     final result = await FilePicker.platform.pickFiles();
@@ -97,27 +115,42 @@ class _DocumentPageState extends State<DocumentPage> {
           children: [
             if (_isUploading) const LinearProgressIndicator(color: Color(0xFF985BEF)),
             const SizedBox(height: 10),
+
+            // Search Bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+              child: TextField(
+                controller: _searchController,
+                decoration: const InputDecoration(
+                  hintText: 'Search documents...',
+                  border: InputBorder.none,
+                  suffixIcon: Icon(Icons.search, color: Color(0xFF985BEF)),
+                ),
+              ),
+            ),
             
             // Upload Card
             GestureDetector(
               onTap: _isUploading ? null : _uploadDocument,
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 40),
+                padding: const EdgeInsets.symmetric(vertical: 25),
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30)),
                 child: Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(15),
                       decoration: const BoxDecoration(color: Color(0xFFFFA23A), shape: BoxShape.circle),
                       child: _isUploading 
                         ? const CircularProgressIndicator(color: Colors.white)
-                        : const Icon(Icons.cloud_upload_outlined, color: Colors.white, size: 60),
+                        : const Icon(Icons.cloud_upload_outlined, color: Colors.white, size: 40),
                     ),
-                    const SizedBox(height: 15),
+                    const SizedBox(height: 10),
                     Text(
                       _isUploading ? 'Uploading...' : 'Upload a document', 
-                      style: const TextStyle(color: Color(0xFFFFA23A), fontSize: 18, fontWeight: FontWeight.bold)
+                      style: const TextStyle(color: Color(0xFFFFA23A), fontSize: 16, fontWeight: FontWeight.bold)
                     ),
                   ],
                 ),
@@ -137,13 +170,24 @@ class _DocumentPageState extends State<DocumentPage> {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator(color: Colors.white));
                   }
-                  final docs = snapshot.data?.docs ?? [];
-                  if (docs.isEmpty) {
+                  final allDocs = snapshot.data?.docs ?? [];
+                  
+                  // Filter logic
+                  final filteredDocs = allDocs.where((doc) {
+                    final name = (doc.data() as Map<String, dynamic>)['name'] ?? '';
+                    return name.toString().toLowerCase().contains(_searchQuery);
+                  }).toList();
+
+                  if (allDocs.isEmpty) {
                     return const Center(child: Text('No documents found.', style: TextStyle(color: Colors.grey)));
                   }
 
+                  if (filteredDocs.isEmpty && _searchQuery.isNotEmpty) {
+                    return const Center(child: Text('No matching documents.', style: TextStyle(color: Colors.white)));
+                  }
+
                   return GridView.builder(
-                    itemCount: docs.length,
+                    itemCount: filteredDocs.length,
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       crossAxisSpacing: 15,
@@ -151,7 +195,7 @@ class _DocumentPageState extends State<DocumentPage> {
                       childAspectRatio: 1.3,
                     ),
                     itemBuilder: (context, index) {
-                      final docData = docs[index].data() as Map<String, dynamic>;
+                      final docData = filteredDocs[index].data() as Map<String, dynamic>;
                       final String url = docData['url'] ?? '';
                       return GestureDetector(
                         onTap: url.isNotEmpty ? () => _viewDocument(url) : null,
