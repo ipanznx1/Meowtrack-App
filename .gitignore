@@ -1,0 +1,48 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+
+# Android
+android/local.properties
+android/key.properties
+android/*.jks
+android/*.keystore
+android/app/google-services.json
+.gradle/
+captures/
+*.iml
+.idea/
+
+# iOS
+ios/Flutter/.last_build_id
+ios/Flutter/Ephemeral/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GoogleService-Info.plist
+Podfile.lock
+
+# Unity (Important for your mini-game)
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Ll]ogs/
+[Uu]serSettings/
+unityLibrary/symbols.zip
+
+# Environment Variables & Sensitive Data
+.env*
+secrets.xml
+tokens.json
+
+# Logic
+*.log
+.DS_Store
+*.hprof
+*.pyc
